@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synchronised Focus Session (Phase 1)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+        }
+        .timer {
+            font-variant-numeric: tabular-nums;
+        }
+        /* Custom scrollbar for participant sections if they overflow */
+        .participant-tasks::-webkit-scrollbar {
+            width: 6px;
+        }
+        .participant-tasks::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .participant-tasks::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .participant-tasks::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Style for strikethrough text */
+        .task-crossed-off span {
+            text-decoration: line-through;
+            color: #9ca3af; /* Tailwind gray-400 */
+        }
+        .task-completed span {
+             color: #6b7280; /* Tailwind gray-500 */
+        }
+        .task-completed input[type="checkbox"]:checked + span {
+            text-decoration: line-through;
+            color: #10b981; /* Tailwind green-500 */
+        }
+        .description-area {
+            background-color: #f9fafb; /* Tailwind gray-50 */
+            border: 1px solid #e5e7eb; /* Tailwind gray-200 */
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem; /* p-2 */
+            margin-top: 0.25rem; /* mt-1 */
+            font-size: 0.875rem; /* text-sm */
+            color: #4b5563; /* Tailwind gray-600 */
+            min-height: 50px;
+        }
+        .editable-description {
+            width: 100%;
+            min-height: 60px;
+            border: 1px solid #d1d5db;
+            padding: 8px;
+            border-radius: 6px;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div id="landing-page" class="min-h-screen flex flex-col items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
+            <h1 class="text-4xl font-bold text-indigo-600 mb-6">Synchronised Focus Session</h1>
+            <p class="text-gray-600 mb-8">Start a new session to work collaboratively with friends in a focused environment.</p>
+            <button id="start-new-session-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg text-lg transition duration-150 ease-in-out">
+                Start New Session
+            </button>
+            <div class="mt-6 text-sm text-gray-500">
+                <p>Or join an existing session using a shared link.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="session-page" class="hidden min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
+        <div id="data-loss-warning" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded-md shadow" role="alert">
+            <p class="font-bold">Important (Phase 1 Notice):</p>
+            <p>Your session data (Goals, Tasks, Notes, Times) is not saved permanently. It will be lost when you leave this session or if the session ends.</p>
+        </div>
+
+        <div id="session-info-area" class="bg-white p-6 rounded-xl shadow-lg mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-bold text-indigo-700">Session ID: <span id="session-id-display" class="text-indigo-500"></span></h1>
+                    <p class="text-sm text-gray-500">Share this ID or the page URL with your friends to join.</p>
+                </div>
+                <div class="text-center sm:text-right">
+                    <h2 class="text-xl sm:text-2xl font-semibold text-gray-700">Overall Session Timer</h2>
+                    <p id="overall-session-timer-display" class="timer text-3xl sm:text-4xl font-bold text-green-600">00:00:00</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6 flex-grow">
+            <div id="my-section" class="lg:w-2/5 bg-white p-6 rounded-xl shadow-lg flex flex-col">
+                <h3 class="text-xl font-semibold mb-1 text-indigo-700">My Focus Zone</h3>
+                <p class="text-sm text-gray-500 mb-4">My User ID: <span id="my-user-id" class="font-medium"></span></p>
+
+                <div class="mb-4">
+                    <label for="main-goal" class="block text-sm font-medium text-gray-700">My Main Session Goal:</label>
+                    <input type="text" id="main-goal-input" name="main-goal" placeholder="Define your primary objective for this session" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <button id="set-main-goal-btn" class="mt-2 w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 px-4 rounded-md text-sm">Set Goal</button>
+                    <h1 id="main-goal-display" class="text-lg font-semibold mt-2 break-words hidden"></h1>
+                    <textarea id="main-goal-description-input" placeholder="Add a description for your main goal (optional, editable anytime)" class="editable-description mt-1 hidden"></textarea>
+                </div>
+
+                <div class="mb-4 flex-grow flex flex-col min-h-[200px]">
+                    <label class="block text-sm font-medium text-gray-700">My Sub-Tasks:</label>
+                    <div id="my-tasks-list" class="mt-1 space-y-2 overflow-y-auto participant-tasks flex-grow pr-2">
+                        </div>
+                    <div class="mt-2 flex gap-2">
+                        <input type="text" id="new-task-input" placeholder="Add a new sub-task" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <button id="add-task-btn" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md text-sm whitespace-nowrap">Add Task</button>
+                    </div>
+                </div>
+                
+                <div class="mt-auto pt-4 border-t border-gray-200">
+                    <h4 class="text-md font-semibold mb-2 text-gray-700">My Timers:</h4>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-blue-50 p-3 rounded-lg text-center">
+                            <p class="text-sm font-medium text-blue-700">Work Time</p>
+                            <p id="my-work-timer" class="timer text-2xl font-bold text-blue-600">00:00:00</p>
+                        </div>
+                        <div class="bg-yellow-50 p-3 rounded-lg text-center">
+                            <p class="text-sm font-medium text-yellow-700">Break Time</p>
+                            <p id="my-break-timer" class="timer text-2xl font-bold text-yellow-600">00:00:00</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <button id="toggle-work-break-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-md text-sm">Start Break</button>
+                        <button id="resume-work-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md text-sm hidden">Resume Work</button>
+                    </div>
+                    <button id="stop-my-session-btn" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm">Stop My Session & View Summary</button>
+                </div>
+            </div>
+
+            <aside id="participants-grid-aside" class="lg:w-3/5 bg-gray-50 p-6 rounded-xl shadow-inner">
+                <h3 class="text-xl font-semibold mb-4 text-gray-700">Other Participants</h3>
+                <div id="participants-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[70vh] pr-2 participant-tasks">
+                    </div>
+                 <p id="no-other-participants" class="text-gray-500 italic">No other participants have joined yet.</p>
+            </aside>
+        </div>
+        <div id="connection-status" class="fixed bottom-4 right-4 bg-gray-700 text-white text-xs px-3 py-1 rounded-full shadow-lg">Connecting...</div>
+    </div>
+
+    <div id="summary-page" class="hidden min-h-screen flex flex-col items-center justify-center p-4 bg-gray-100">
+        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-lg w-full">
+            <h1 class="text-3xl font-bold text-indigo-600 mb-6 text-center">My Session Summary</h1>
+            
+            <div class="mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">Main Goal:</h2>
+                <p id="summary-main-goal" class="text-gray-800 bg-gray-50 p-3 rounded-md break-words"></p>
+                <p id="summary-main-goal-description" class="text-sm text-gray-600 bg-gray-50 p-2 mt-1 rounded-md break-words"></p>
+            </div>
+
+            <div class="mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">Tasks:</h2>
+                <ul id="summary-tasks-list" class="list-disc list-inside space-y-1 text-gray-800 bg-gray-50 p-3 rounded-md">
+                    </ul>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-blue-100 p-4 rounded-lg text-center">
+                    <p class="text-sm font-medium text-blue-800">Total Work Time</p>
+                    <p id="summary-total-work-time" class="timer text-2xl font-bold text-blue-700">00:00:00</p>
+                </div>
+                <div class="bg-yellow-100 p-4 rounded-lg text-center">
+                    <p class="text-sm font-medium text-yellow-800">Total Break Time</p>
+                    <p id="summary-total-break-time" class="timer text-2xl font-bold text-yellow-700">00:00:00</p>
+                </div>
+            </div>
+            
+            <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded-md" role="alert">
+                <p class="font-bold">Phase 1 Notice:</p>
+                <p>This summary is temporary and will NOT be saved after you leave this page. For future versions (Phase 2), you will be able to save and export your session summaries.</p>
+            </div>
+
+            <button id="back-to-landing-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg text-lg transition duration-150 ease-in-out">
+                Back to Start
+            </button>
+        </div>
+    </div>
+
+<script>
+// --- CONFIGURATION ---
+const WS_URL = `ws://${window.location.host}`; // Assumes backend is on the same host
+
+// --- DOM ELEMENTS ---
+const landingPage = document.getElementById('landing-page');
+const sessionPage = document.getElementById('session-page');
+const summaryPage = document.getElementById('summary-page');
+
+const startNewSessionBtn = document.getElementById('start-new-session-btn');
+const sessionIdDisplay = document.getElementById('session-id-display');
+const overallSessionTimerDisplay = document.getElementById('overall-session-timer-display');
+
+const myUserIdDisplay = document.getElementById('my-user-id');
+const mainGoalInput = document.getElementById('main-goal-input');
+const setMainGoalBtn = document.getElementById('set-main-goal-btn');
+const mainGoalDisplay = document.getElementById('main-goal-display');
+const mainGoalDescriptionInput = document.getElementById('main-goal-description-input');
+
+const myTasksList = document.getElementById('my-tasks-list');
+const newTaskInput = document.getElementById('new-task-input');
+const addTaskBtn = document.getElementById('add-task-btn');
+
+const myWorkTimerDisplay = document.getElementById('my-work-timer');
+const myBreakTimerDisplay = document.getElementById('my-break-timer');
+const toggleWorkBreakBtn = document.getElementById('toggle-work-break-btn');
+const resumeWorkBtn = document.getElementById('resume-work-btn');
+const stopMySessionBtn = document.getElementById('stop-my-session-btn');
+
+const participantsGrid = document.getElementById('participants-grid');
+const noOtherParticipantsMessage = document.getElementById('no-other-participants');
+
+const connectionStatusDisplay = document.getElementById('connection-status');
+
+// Summary Page Elements
+const summaryMainGoal = document.getElementById('summary-main-goal');
+const summaryMainGoalDescription = document.getElementById('summary-main-goal-description');
+const summaryTasksList = document.getElementById('summary-tasks-list');
+const summaryTotalWorkTime = document.getElementById('summary-total-work-time');
+const summaryTotalBreakTime = document.getElementById('summary-total-break-time');
+const backToLandingBtn = document.getElementById('back-to-landing-btn');
+
+
+// --- STATE ---
+let ws;
+let currentSessionId = null;
+let currentUserId = null;
+let myMainGoalSet = false;
+let myTasks = []; // { id: string, text: string, completed: boolean, crossedOff: boolean, description: string }
+let heartBeatInterval;
+const HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
+
+// --- UTILITY FUNCTIONS ---
+function formatTime(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+    const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function generateLocalUserId() {
+    // Try to get from localStorage first for session persistence in same browser
+    let userId = localStorage.getItem(`focusSessionUserId_${currentSessionId}`);
+    if (!userId) {
+        userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem(`focusSessionUserId_${currentSessionId}`, userId);
+    }
+    return userId;
+}
+
+// --- WEB SOCKETS ---
+function connectWebSocket() {
+    if (!currentSessionId) {
+        console.error("No session ID to connect to.");
+        return;
+    }
+    
+    ws = new WebSocket(`${WS_URL}?sessionId=${currentSessionId}&userId=${currentUserId}`);
+
+    ws.onopen = () => {
+        console.log('WebSocket connection established.');
+        connectionStatusDisplay.textContent = 'Connected';
+        connectionStatusDisplay.classList.remove('bg-red-500');
+        connectionStatusDisplay.classList.add('bg-green-500');
+        // Start heartbeat
+        heartBeatInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'heartbeat' }));
+            }
+        }, HEARTBEAT_INTERVAL_MS);
+    };
+
+    ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        console.log('Received message:', message);
+        handleServerMessage(message);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket connection closed.');
+        connectionStatusDisplay.textContent = 'Disconnected. Attempting to reconnect...';
+        connectionStatusDisplay.classList.remove('bg-green-500');
+        connectionStatusDisplay.classList.add('bg-red-500');
+        clearInterval(heartBeatInterval);
+        // Optional: Implement reconnection logic here if desired
+        // For Phase 1, a manual refresh might be acceptable for simplicity if connection fully drops.
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        connectionStatusDisplay.textContent = 'Connection Error';
+        connectionStatusDisplay.classList.remove('bg-green-500');
+        connectionStatusDisplay.classList.add('bg-red-500');
+        clearInterval(heartBeatInterval);
+    };
+}
+
+function sendMessage(type, payload) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type, payload }));
+    } else {
+        console.error('WebSocket is not connected.');
+    }
+}
+
+// --- MESSAGE HANDLING ---
+function handleServerMessage(message) {
+    switch (message.type) {
+        case 'SESSION_STATE':
+            updateSessionState(message.payload);
+            break;
+        case 'USER_JOINED':
+            addParticipantCard(message.payload.userData);
+            checkParticipantsMessage();
+            break;
+        case 'USER_LEFT':
+            removeParticipantCard(message.payload.userId);
+            checkParticipantsMessage();
+            break;
+        case 'GOAL_UPDATED':
+            updateParticipantGoal(message.payload.userId, message.payload.goal, message.payload.description);
+            break;
+        case 'TASK_ADDED':
+            updateParticipantTasks(message.payload.userId, message.payload.tasks);
+            break;
+        case 'TASK_UPDATED': // Covers completion, crossedOff, description
+            updateParticipantTasks(message.payload.userId, message.payload.tasks);
+            break;
+        case 'TIMER_UPDATE':
+            updateTimers(message.payload);
+            break;
+        case 'INDIVIDUAL_SUMMARY':
+            showSummaryPage(message.payload);
+            break;
+        case 'ERROR':
+            alert(`Server Error: ${message.payload.message}`);
+            break;
+    }
+}
+
+// --- UI UPDATES ---
+function showLandingPage() {
+    landingPage.classList.remove('hidden');
+    sessionPage.classList.add('hidden');
+    summaryPage.classList.add('hidden');
+    currentSessionId = null;
+    currentUserId = null;
+    myMainGoalSet = false;
+    myTasks = [];
+    if (ws) ws.close();
+    localStorage.removeItem(`focusSessionUserId_${currentSessionId}`); // Clear specific user ID
+}
+
+function showSessionPage(sessionId) {
+    landingPage.classList.add('hidden');
+    sessionPage.classList.remove('hidden');
+    summaryPage.classList.add('hidden');
+    
+    currentSessionId = sessionId;
+    sessionIdDisplay.textContent = sessionId;
+    currentUserId = generateLocalUserId();
+    myUserIdDisplay.textContent = currentUserId;
+
+    // Reset UI elements for the new session
+    mainGoalInput.value = '';
+    mainGoalDisplay.textContent = '';
+    mainGoalDisplay.classList.add('hidden');
+    mainGoalInput.classList.remove('hidden');
+    mainGoalDescriptionInput.value = '';
+    mainGoalDescriptionInput.classList.add('hidden');
+    setMainGoalBtn.classList.remove('hidden');
+    myMainGoalSet = false;
+    myTasksList.innerHTML = '';
+    myTasks = [];
+    participantsGrid.innerHTML = ''; // Clear previous participants
+
+    connectWebSocket();
+}
+
+function showSummaryPage(summaryData) {
+    sessionPage.classList.add('hidden');
+    summaryPage.classList.remove('hidden');
+
+    summaryMainGoal.textContent = summaryData.mainGoal || "No main goal was set.";
+    summaryMainGoalDescription.textContent = summaryData.mainGoalDescription || "";
+    summaryMainGoalDescription.style.display = summaryData.mainGoalDescription ? 'block' : 'none';
+
+
+    summaryTasksList.innerHTML = '';
+    if (summaryData.tasks && summaryData.tasks.length > 0) {
+        summaryData.tasks.forEach(task => {
+            const li = document.createElement('li');
+            li.className = `py-1 ${task.completed ? 'text-green-600 line-through' : ''} ${task.crossedOff ? 'text-red-500 line-through' : ''}`;
+            li.textContent = task.text;
+            if (task.description) {
+                const descEl = document.createElement('p');
+                descEl.className = 'text-xs text-gray-500 pl-4';
+                descEl.textContent = `Description: ${task.description}`;
+                li.appendChild(descEl);
+            }
+            summaryTasksList.appendChild(li);
+        });
+    } else {
+        summaryTasksList.innerHTML = '<li class="italic text-gray-500">No tasks were added.</li>';
+    }
+
+    summaryTotalWorkTime.textContent = formatTime(summaryData.totalWorkTime);
+    summaryTotalBreakTime.textContent = formatTime(summaryData.totalBreakTime);
+
+    if (ws) {
+        ws.onclose = null; // Prevent reconnection attempts after explicitly stopping
+        ws.close();
+    }
+    localStorage.removeItem(`focusSessionUserId_${currentSessionId}`);
+}
+
+
+function updateSessionState(state) {
+    overallSessionTimerDisplay.textContent = formatTime(state.overallSessionTime);
+    
+    participantsGrid.innerHTML = ''; // Clear existing before repopulating
+    state.users.forEach(userData => {
+        if (userData.userId === currentUserId) {
+            // Update my own section if needed (e.g., rejoining)
+            myWorkTimerDisplay.textContent = formatTime(userData.workTime);
+            myBreakTimerDisplay.textContent = formatTime(userData.breakTime);
+            updateMyGoalDisplay(userData.goal, userData.goalDescription);
+            myTasks = userData.tasks || [];
+            renderMyTasks();
+            
+            if (userData.timerState === 'work') {
+                toggleWorkBreakBtn.textContent = 'Start Break';
+                toggleWorkBreakBtn.classList.replace('bg-green-500', 'bg-yellow-500');
+                toggleWorkBreakBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
+                toggleWorkBreakBtn.classList.remove('hidden');
+                resumeWorkBtn.classList.add('hidden');
+            } else { // break
+                toggleWorkBreakBtn.classList.add('hidden');
+                resumeWorkBtn.classList.remove('hidden');
+            }
+
+        } else {
+            addParticipantCard(userData);
+        }
+    });
+    checkParticipantsMessage();
+}
+
+function updateTimers(timerData) {
+    if (timerData.overallSessionTime !== undefined) {
+        overallSessionTimerDisplay.textContent = formatTime(timerData.overallSessionTime);
+    }
+    if (timerData.users) {
+        timerData.users.forEach(userTime => {
+            if (userTime.userId === currentUserId) {
+                myWorkTimerDisplay.textContent = formatTime(userTime.workTime);
+                myBreakTimerDisplay.textContent = formatTime(userTime.breakTime);
+            } else {
+                const card = participantsGrid.querySelector(`.participant-card[data-user-id="${userTime.userId}"]`);
+                if (card) {
+                    card.querySelector('.participant-work-timer').textContent = formatTime(userTime.workTime);
+                    card.querySelector('.participant-break-timer').textContent = formatTime(userTime.breakTime);
+                    const statusEl = card.querySelector('.participant-timer-status');
+                    if (statusEl) {
+                         statusEl.textContent = userTime.timerState === 'work' ? 'Working' : 'On Break';
+                         statusEl.className = `participant-timer-status text-xs mt-1 text-center font-medium ${userTime.timerState === 'work' ? 'text-blue-600' : 'text-yellow-600'}`;
+                    }
+                }
+            }
+        });
+    }
+}
+
+function updateMyGoalDisplay(goalText, goalDescription) {
+    if (goalText) {
+        mainGoalDisplay.textContent = goalText;
+        mainGoalDisplay.classList.remove('hidden');
+        mainGoalInput.classList.add('hidden');
+        setMainGoalBtn.classList.add('hidden');
+        myMainGoalSet = true;
+        mainGoalDescriptionInput.classList.remove('hidden');
+        mainGoalDescriptionInput.value = goalDescription || '';
+    } else {
+        mainGoalDisplay.classList.add('hidden');
+        mainGoalInput.classList.remove('hidden');
+        setMainGoalBtn.classList.remove('hidden');
+        myMainGoalSet = false;
+        mainGoalDescriptionInput.classList.add('hidden');
+    }
+}
+
+function renderMyTasks() {
+    myTasksList.innerHTML = '';
+    if (myTasks.length === 0) {
+        const placeholder = document.createElement('p');
+        placeholder.className = 'text-sm text-gray-400 italic';
+        placeholder.textContent = 'No tasks added yet. Add your first task below.';
+        myTasksList.appendChild(placeholder);
+        return;
+    }
+
+    myTasks.forEach(task => {
+        const taskDiv = document.createElement('div');
+        taskDiv.className = `p-2 border rounded-md flex flex-col gap-1 text-sm ${task.completed ? 'bg-green-50' : 'bg-white'} ${task.crossedOff ? 'opacity-60' : ''}`;
+        taskDiv.dataset.taskId = task.id;
+
+        const taskHeader = document.createElement('div');
+        taskHeader.className = 'flex items-center justify-between';
+        
+        const taskContent = document.createElement('div');
+        taskContent.className = 'flex items-center flex-grow';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.completed;
+        checkbox.className = 'mr-2 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500';
+        checkbox.disabled = task.crossedOff;
+        checkbox.onchange = () => toggleTaskCompletion(task.id);
+
+        const taskTextSpan = document.createElement('span');
+        taskTextSpan.textContent = task.text;
+        taskTextSpan.className = `flex-grow break-words ${task.crossedOff ? 'line-through text-gray-400' : ''} ${task.completed ? 'line-through text-green-600' : ''}`;
+        
+        taskContent.appendChild(checkbox);
+        taskContent.appendChild(taskTextSpan);
+        taskHeader.appendChild(taskContent);
+
+        if (!task.crossedOff) {
+            const crossOffBtn = document.createElement('button');
+            crossOffBtn.innerHTML = '&times;'; // Cross symbol
+            crossOffBtn.title = "Cross off task (abandon)";
+            crossOffBtn.className = 'ml-2 text-red-500 hover:text-red-700 font-bold px-2 py-0.5 rounded text-xs';
+            crossOffBtn.onclick = () => crossOffTask(task.id);
+            taskHeader.appendChild(crossOffBtn);
+        } else {
+             const crossedOffIndicator = document.createElement('span');
+             crossedOffIndicator.textContent = '(Abandoned)';
+             crossedOffIndicator.className = 'ml-2 text-xs text-red-400 italic';
+             taskHeader.appendChild(crossedOffIndicator);
+        }
+        
+        taskDiv.appendChild(taskHeader);
+
+        // Description Area
+        const descriptionTextarea = document.createElement('textarea');
+        descriptionTextarea.value = task.description || '';
+        descriptionTextarea.placeholder = 'Add task description (optional)';
+        descriptionTextarea.className = 'editable-description text-xs mt-1';
+        descriptionTextarea.disabled = task.crossedOff;
+        descriptionTextarea.onblur = (e) => updateTaskDescription(task.id, e.target.value);
+        
+        taskDiv.appendChild(descriptionTextarea);
+        myTasksList.appendChild(taskDiv);
+    });
+}
+
+
+function addParticipantCard(userData) {
+    if (participantsGrid.querySelector(`.participant-card[data-user-id="${userData.userId}"]`)) {
+        return; // Card already exists
+    }
+
+    const card = document.createElement('div');
+    card.className = 'bg-white p-4 rounded-lg shadow-md participant-card flex flex-col';
+    card.dataset.userId = userData.userId;
+
+    card.innerHTML = `
+        <h4 class="text-md font-semibold text-indigo-600 truncate">User: <span class="participant-user-id font-mono text-sm">${userData.userId}</span></h4>
+        <div class="mt-2">
+            <p class="text-sm font-medium text-gray-600">Main Goal:</p>
+            <p class="participant-main-goal text-sm text-gray-800 break-words bg-gray-50 p-2 rounded min-h-[3em]">${userData.goal || '<span class="italic text-gray-400">Not set</span>'}</p>
+            <div class="participant-main-goal-description text-xs text-gray-500 mt-1 p-1 bg-gray-50 rounded break-words min-h-[2em]">${userData.goalDescription || ''}</div>
+        </div>
+        <div class="mt-3 flex-grow">
+            <p class="text-sm font-medium text-gray-600">Tasks:</p>
+            <ul class="participant-tasks-list list-none pl-0 text-sm text-gray-700 space-y-1 max-h-32 overflow-y-auto pr-1 participant-tasks">
+                <li class="text-gray-400 italic">No tasks yet.</li>
+            </ul>
+        </div>
+        <div class="mt-auto pt-3 border-t border-gray-100">
+            <div class="grid grid-cols-2 gap-2 text-xs mb-1">
+                <div class="bg-blue-50 p-2 rounded text-center">Work: <span class="participant-work-timer font-semibold text-blue-700">${formatTime(userData.workTime)}</span></div>
+                <div class="bg-yellow-50 p-2 rounded text-center">Break: <span class="participant-break-timer font-semibold text-yellow-700">${formatTime(userData.breakTime)}</span></div>
+            </div>
+            <p class="participant-timer-status text-xs mt-1 text-center font-medium ${userData.timerState === 'work' ? 'text-blue-600' : 'text-yellow-600'}">${userData.timerState === 'work' ? 'Working' : 'On Break'}</p>
+        </div>
+    `;
+    participantsGrid.appendChild(card);
+    updateParticipantTasks(userData.userId, userData.tasks); // Render tasks for new card
+    checkParticipantsMessage();
+}
+
+function removeParticipantCard(userId) {
+    const card = participantsGrid.querySelector(`.participant-card[data-user-id="${userId}"]`);
+    if (card) {
+        card.remove();
+    }
+    checkParticipantsMessage();
+}
+
+function updateParticipantGoal(userId, goal, description) {
+    if (userId === currentUserId) {
+        updateMyGoalDisplay(goal, description);
+    } else {
+        const card = participantsGrid.querySelector(`.participant-card[data-user-id="${userId}"]`);
+        if (card) {
+            card.querySelector('.participant-main-goal').innerHTML = goal || '<span class="italic text-gray-400">Not set</span>';
+            card.querySelector('.participant-main-goal-description').textContent = description || '';
+        }
+    }
+}
+
+function updateParticipantTasks(userId, tasks) {
+    const safeTasks = tasks || [];
+    if (userId === currentUserId) {
+        myTasks = safeTasks;
+        renderMyTasks();
+    } else {
+        const card = participantsGrid.querySelector(`.participant-card[data-user-id="${userId}"]`);
+        if (card) {
+            const ul = card.querySelector('.participant-tasks-list');
+            ul.innerHTML = ''; // Clear previous tasks
+            if (safeTasks.length > 0) {
+                safeTasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = `py-0.5 px-1 rounded text-xs ${task.completed ? 'bg-green-100' : ''} ${task.crossedOff ? 'bg-red-100' : ''}`;
+                    
+                    const taskTextSpan = document.createElement('span');
+                    taskTextSpan.textContent = task.text;
+                    if (task.completed) taskTextSpan.classList.add('line-through', 'text-green-700');
+                    if (task.crossedOff) taskTextSpan.classList.add('line-through', 'text-red-700');
+                    
+                    li.appendChild(taskTextSpan);
+
+                    if (task.description) {
+                        const descP = document.createElement('p');
+                        descP.className = 'text-gray-500 italic pl-2 text-[0.7rem]';
+                        descP.textContent = `Desc: ${task.description.substring(0,30)}${task.description.length > 30 ? '...' : ''}`; // Show snippet
+                        li.appendChild(descP);
+                    }
+                    ul.appendChild(li);
+                });
+            } else {
+                ul.innerHTML = '<li class="text-gray-400 italic text-xs">No tasks yet.</li>';
+            }
+        }
+    }
+}
+
+function checkParticipantsMessage() {
+    if (participantsGrid.children.length === 0) {
+        noOtherParticipantsMessage.classList.remove('hidden');
+    } else {
+        noOtherParticipantsMessage.classList.add('hidden');
+    }
+}
+
+
+// --- EVENT LISTENERS ---
+startNewSessionBtn.onclick = async () => {
+    try {
+        // In Phase 1, session creation is implicit by client connecting with a new/random ID.
+        // For a more robust approach, you might hit a backend endpoint first.
+        // Here, we'll generate a client-side suggestion for a session ID or let backend assign.
+        // The backend will create the session if it doesn't exist.
+        const newSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        // Instead of navigating, we just switch views and connect.
+        // The server will handle creating the session on first connect if it doesn't exist.
+        // Or, if you want explicit creation:
+        // const response = await fetch('/create-session', { method: 'POST' });
+        // const data = await response.json();
+        // showSessionPage(data.sessionId);
+        
+        // For this example, we'll use the URL to determine session ID on load,
+        // and for new sessions, we generate one and update URL.
+        history.pushState(null, '', `?session=${newSessionId}`);
+        showSessionPage(newSessionId);
+
+    } catch (error) {
+        console.error('Failed to start new session:', error);
+        alert('Error starting new session. Please try again.');
+    }
+};
+
+setMainGoalBtn.onclick = () => {
+    const goalText = mainGoalInput.value.trim();
+    if (goalText && !myMainGoalSet) {
+        sendMessage('SET_GOAL', { goal: goalText, description: mainGoalDescriptionInput.value.trim() });
+        updateMyGoalDisplay(goalText, mainGoalDescriptionInput.value.trim()); // Optimistic update
+    } else if (myMainGoalSet) {
+        alert("Main goal can only be set once per session in this version.");
+    } else {
+        alert("Please enter your main goal.");
+    }
+};
+
+mainGoalDescriptionInput.onblur = () => {
+    if (myMainGoalSet) {
+         sendMessage('SET_GOAL_DESCRIPTION', { description: mainGoalDescriptionInput.value.trim() });
+    }
+};
+
+addTaskBtn.onclick = () => {
+    const taskText = newTaskInput.value.trim();
+    if (taskText) {
+        const newTask = {
+            id: 'task_' + Math.random().toString(36).substr(2, 9),
+            text: taskText,
+            completed: false,
+            crossedOff: false,
+            description: ''
+        };
+        // myTasks.push(newTask); // Optimistic update handled by server response
+        // renderMyTasks();
+        sendMessage('ADD_TASK', { task: newTask });
+        newTaskInput.value = '';
+    } else {
+        alert("Please enter task text.");
+    }
+};
+newTaskInput.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        addTaskBtn.onclick();
+    }
+});
+
+
+function toggleTaskCompletion(taskId) {
+    const task = myTasks.find(t => t.id === taskId);
+    if (task && !task.crossedOff) {
+        // task.completed = !task.completed; // Optimistic update handled by server response
+        // renderMyTasks();
+        sendMessage('TOGGLE_TASK_COMPLETION', { taskId });
+    }
+}
+
+function crossOffTask(taskId) {
+    const task = myTasks.find(t => t.id === taskId);
+    if (task && !task.crossedOff) { // Can only cross off if not already crossed off
+        // task.crossedOff = true;
+        // task.completed = false; // Crossing off uncompletes it
+        // renderMyTasks();
+        sendMessage('CROSS_OFF_TASK', { taskId });
+    }
+}
+
+function updateTaskDescription(taskId, description) {
+    const task = myTasks.find(t => t.id === taskId);
+    if (task && task.description !== description) {
+        // task.description = description; // Optimistic update handled by server response
+        sendMessage('UPDATE_TASK_DESCRIPTION', { taskId, description });
+    }
+}
+
+
+toggleWorkBreakBtn.onclick = () => {
+    // This button is "Start Break"
+    sendMessage('START_BREAK', {});
+    toggleWorkBreakBtn.classList.add('hidden');
+    resumeWorkBtn.classList.remove('hidden');
+    // Optimistic UI update for button text/state could be done here,
+    // but server will send back full timer state.
+};
+
+resumeWorkBtn.onclick = () => {
+    // This button is "Resume Work"
+    sendMessage('RESUME_WORK', {});
+    resumeWorkBtn.classList.add('hidden');
+    toggleWorkBreakBtn.classList.remove('hidden');
+    toggleWorkBreakBtn.textContent = 'Start Break'; // Assuming it goes back to work
+    toggleWorkBreakBtn.classList.replace('bg-green-500', 'bg-yellow-500');
+    toggleWorkBreakBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
+};
+
+stopMySessionBtn.onclick = () => {
+    if (confirm("Are you sure you want to stop your session and leave?")) {
+        sendMessage('STOP_SESSION', {});
+        // Summary page will be shown upon receiving 'INDIVIDUAL_SUMMARY' from server
+    }
+};
+
+backToLandingBtn.onclick = () => {
+    history.pushState(null, '', window.location.pathname); // Clear query params
+    showLandingPage();
+};
+
+// --- INITIALIZATION ---
+window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionIdFromUrl = urlParams.get('session');
+
+    if (sessionIdFromUrl) {
+        showSessionPage(sessionIdFromUrl);
+    } else {
+        showLandingPage();
+    }
+    checkParticipantsMessage(); // Initial check
+};
+
+// Handle browser back/forward
+window.onpopstate = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionIdFromUrl = urlParams.get('session');
+    if (sessionIdFromUrl && sessionIdFromUrl !== currentSessionId) {
+        showSessionPage(sessionIdFromUrl);
+    } else if (!sessionIdFromUrl && currentSessionId) {
+        showLandingPage();
+    }
+};
+
+</script>
+</body>
+</html>
