@@ -1,9 +1,9 @@
 /**
  * Rally - Reactive State Store & Persistence
- * Manages rounds, long rests, auto-transitions, Quests, and peer presence.
+ * Supports fractional/second timing, rounds, Quests, and peer presence.
  */
 
-const STORAGE_KEY = 'rally_state_v2';
+const STORAGE_KEY = 'rally_state_v3';
 
 const DEFAULT_STATE = {
   profile: {
@@ -11,11 +11,11 @@ const DEFAULT_STATE = {
     avatarColor: '#38bdf8',
   },
   config: {
-    sprintDurationMinutes: 25,
-    shortRestDurationMinutes: 5,
-    longRestDurationMinutes: 15,
+    sprintDurationSeconds: 25 * 60, // 25 mins
+    shortRestDurationSeconds: 5 * 60, // 5 mins
+    longRestDurationSeconds: 15 * 60, // 15 mins
     roundsBeforeLongRest: 4,
-    totalRounds: 4, // 0 = infinite continuous rounds
+    totalRounds: 4, // 0 = infinite continuous
     autoStartBreaks: true,
     autoStartSprints: false,
     timerDirection: 'countdown', // 'countdown' | 'countup'
@@ -62,10 +62,9 @@ class StateStore {
         config: { ...DEFAULT_STATE.config, ...parsed.config },
         session: { ...DEFAULT_STATE.session, ...parsed.session },
         quest: { ...DEFAULT_STATE.quest, ...parsed.quest },
-        room: structuredClone(DEFAULT_STATE.room), // Room connections are ephemeral
+        room: structuredClone(DEFAULT_STATE.room),
       };
 
-      // Reconcile remaining time if it was running before page reload
       if (state.session.status === 'running' && state.session.targetTimestamp) {
         if (state.config.timerDirection === 'countdown') {
           const remaining = state.session.targetTimestamp - Date.now();
@@ -84,7 +83,7 @@ class StateStore {
 
       return state;
     } catch (e) {
-      console.warn('Failed to load state from localStorage, falling back to defaults:', e);
+      console.warn('Failed to parse local state, falling back to defaults:', e);
       return structuredClone(DEFAULT_STATE);
     }
   }
@@ -121,7 +120,6 @@ class StateStore {
     return structuredClone(this.state);
   }
 
-  /* ================= Profile & Preferences ================= */
   updateProfile(displayName, avatarColor) {
     if (displayName) this.state.profile.displayName = displayName.trim();
     if (avatarColor) this.state.profile.avatarColor = avatarColor;
@@ -131,6 +129,7 @@ class StateStore {
   updateConfig(partialConfig) {
     this.state.config = { ...this.state.config, ...partialConfig };
 
+    // If timer is idle, recalculate duration based on new settings immediately
     if (this.state.session.status === 'idle') {
       const ms = this.getDurationForMode(this.state.session.mode);
       this.state.session.totalDurationMs = ms;
@@ -142,16 +141,15 @@ class StateStore {
   getDurationForMode(mode) {
     switch (mode) {
       case 'shortRest':
-        return this.state.config.shortRestDurationMinutes * 60 * 1000;
+        return Math.round(this.state.config.shortRestDurationSeconds * 1000);
       case 'longRest':
-        return this.state.config.longRestDurationMinutes * 60 * 1000;
+        return Math.round(this.state.config.longRestDurationSeconds * 1000);
       case 'sprint':
       default:
-        return this.state.config.sprintDurationMinutes * 60 * 1000;
+        return Math.round(this.state.config.sprintDurationSeconds * 1000);
     }
   }
 
-  /* ================= Current Quest & Stepping Stones ================= */
   setQuestTitle(title) {
     this.state.quest.title = title;
     this.notify();
@@ -181,7 +179,6 @@ class StateStore {
     this.notify();
   }
 
-  /* ================= Timer Session & Rounds Engine ================= */
   setMode(mode, roundOverride = null) {
     if (!['sprint', 'shortRest', 'longRest'].includes(mode)) return;
 
@@ -224,11 +221,6 @@ class StateStore {
     this.setMode('sprint', 1);
   }
 
-  /**
-   * Evaluates the next mode in the cycle:
-   * Sprint -> Short Rest (or Long Rest if interval hit) -> Sprint (next round)
-   * @returns {Object} { nextMode, nextRound, shouldAutoStart }
-   */
   advanceSession() {
     const current = this.state.session.mode;
     const round = this.state.session.currentRound;
@@ -239,7 +231,6 @@ class StateStore {
     let shouldAutoStart = false;
 
     if (current === 'sprint') {
-      // Check if long rest interval reached
       if (round % roundsBeforeLongRest === 0) {
         nextMode = 'longRest';
       } else {
@@ -247,7 +238,6 @@ class StateStore {
       }
       shouldAutoStart = autoStartBreaks;
     } else {
-      // Exiting a rest period moves to the next sprint round
       nextMode = 'sprint';
       nextRound = round + 1;
       shouldAutoStart = autoStartSprints;
@@ -262,7 +252,6 @@ class StateStore {
     return { nextMode, nextRound, shouldAutoStart };
   }
 
-  /* ================= Shared Squad Room & Peers ================= */
   setRoomId(roomId, isHost = false) {
     this.state.room.roomId = roomId;
     this.state.room.isHost = isHost;
