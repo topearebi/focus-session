@@ -1,6 +1,7 @@
 /**
  * Rally - UI Controller & DOM Orchestrator
- * Manages active step spotlight, collapsible task drawers, acoustic settings, and squad process cloning.
+ * Manages active step spotlight, inline task editing/reordering, count-up dial progress,
+ * and flicker-free squad peer card reconciliation.
  */
 
 import { dynamicFavicon } from './favicon.js';
@@ -130,11 +131,16 @@ class UIController {
       isRunning ? `Pause ${this.getModeLabel(mode)}` : `Start ${this.getModeLabel(mode)}`
     );
 
-    // 5. Progress Dial Offset
-    const elapsedRatio = totalDurationMs > 0 ? (totalDurationMs - remainingMs) / totalDurationMs : 0;
-    const normalizedRatio = config.timerDirection === 'countup' 
-      ? 1 
-      : Math.min(1, Math.max(0, elapsedRatio));
+    // 5. Progress Dial Offset (Proper ratio calculation for countdown and count-up)
+    let elapsedRatio = 0;
+    if (totalDurationMs > 0) {
+      if (config.timerDirection === 'countup') {
+        elapsedRatio = remainingMs / totalDurationMs;
+      } else {
+        elapsedRatio = (totalDurationMs - remainingMs) / totalDurationMs;
+      }
+    }
+    const normalizedRatio = Math.min(1, Math.max(0, elapsedRatio));
     const offset = this.circumference * (1 - normalizedRatio);
     this.progressIndicator.style.strokeDashoffset = `${offset}px`;
 
@@ -145,13 +151,13 @@ class UIController {
     // 7. Contextual Live Sync Banner
     this.renderSyncBanner(room);
 
-    // 8. Current Quest & Stepping Stones (Spotlight + Drawers)
+    // 8. Current Quest & Stepping Stones (Spotlight + Drawers with in-place edits)
     if (document.activeElement !== this.questTitleInput) {
       this.questTitleInput.value = quest.title;
     }
     this.renderSteppingStones(quest.stones);
 
-    // 9. Room Network Status & Peer Grid
+    // 9. Room Network Status & Non-destructive Peer Grid
     this.renderRoomStatus(room);
     this.renderPeerGrid(room.peers);
 
@@ -237,44 +243,71 @@ class UIController {
 
     // 1. Active Step Spotlight (First pending stone)
     if (this.activeStoneContainer) {
-      this.activeStoneContainer.innerHTML = '';
-      if (pendingStones.length > 0) {
-        const activeStone = pendingStones[0];
-        const card = document.createElement('div');
-        card.className = 'active-stone-card';
+      const activeInput = this.activeStoneContainer.querySelector('.active-stone-input');
+      const isEditingActive = activeInput && document.activeElement === activeInput;
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'stone-checkbox';
-        checkbox.checked = false;
-        checkbox.setAttribute('aria-label', `Complete active focus: "${activeStone.text}"`);
-        checkbox.addEventListener('change', () => store.toggleSteppingStone(activeStone.id));
+      if (!isEditingActive) {
+        this.activeStoneContainer.innerHTML = '';
+        if (pendingStones.length > 0) {
+          const activeStone = pendingStones[0];
+          const card = document.createElement('div');
+          card.className = 'active-stone-card';
 
-        const body = document.createElement('div');
-        body.className = 'active-stone-body';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'stone-checkbox';
+          checkbox.checked = false;
+          checkbox.setAttribute('aria-label', `Complete active focus: "${activeStone.text}"`);
+          checkbox.addEventListener('change', () => {
+            store.toggleSteppingStone(activeStone.id);
+            peerSync.broadcast();
+          });
 
-        const label = document.createElement('span');
-        label.className = 'active-stone-label';
-        label.textContent = 'Current Focus';
+          const body = document.createElement('div');
+          body.className = 'active-stone-body';
 
-        const text = document.createElement('span');
-        text.className = 'active-stone-text';
-        text.textContent = activeStone.text;
+          const label = document.createElement('span');
+          label.className = 'active-stone-label';
+          label.textContent = 'Current Focus';
 
-        body.appendChild(label);
-        body.appendChild(text);
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'active-stone-input';
+          input.value = activeStone.text;
+          input.setAttribute('aria-label', 'Edit current focus task text');
 
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'stone-delete-btn';
-        deleteBtn.setAttribute('aria-label', `Delete "${activeStone.text}"`);
-        deleteBtn.innerHTML = '&times;';
-        deleteBtn.addEventListener('click', () => store.deleteSteppingStone(activeStone.id));
+          const commitEdit = () => {
+            const val = input.value.trim();
+            if (val && val !== activeStone.text) {
+              store.updateSteppingStone(activeStone.id, val);
+              peerSync.broadcast();
+            }
+          };
 
-        card.appendChild(checkbox);
-        card.appendChild(body);
-        card.appendChild(deleteBtn);
-        this.activeStoneContainer.appendChild(card);
+          input.addEventListener('change', commitEdit);
+          input.addEventListener('blur', commitEdit);
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') input.blur();
+          });
+
+          body.appendChild(label);
+          body.appendChild(input);
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'stone-delete-btn';
+          deleteBtn.setAttribute('aria-label', `Delete "${activeStone.text}"`);
+          deleteBtn.innerHTML = '&times;';
+          deleteBtn.addEventListener('click', () => {
+            store.deleteSteppingStone(activeStone.id);
+            peerSync.broadcast();
+          });
+
+          card.appendChild(checkbox);
+          card.appendChild(body);
+          card.appendChild(deleteBtn);
+          this.activeStoneContainer.appendChild(card);
+        }
       }
     }
 
@@ -282,25 +315,40 @@ class UIController {
     const upcomingStones = pendingStones.slice(1);
     if (this.upcomingCountBadge) this.upcomingCountBadge.textContent = upcomingStones.length;
     if (this.steppingStonesList) {
-      this.steppingStonesList.innerHTML = '';
-      upcomingStones.forEach((stone) => {
-        this.steppingStonesList.appendChild(this.createStoneListItem(stone));
-      });
+      const activeElement = document.activeElement;
+      const isEditingUpcoming = this.steppingStonesList.contains(activeElement);
+
+      if (!isEditingUpcoming) {
+        this.steppingStonesList.innerHTML = '';
+        upcomingStones.forEach((stone, index) => {
+          const isFirstUpcoming = index === 0;
+          const isLastUpcoming = index === upcomingStones.length - 1;
+          this.steppingStonesList.appendChild(
+            this.createStoneListItem(stone, isFirstUpcoming, isLastUpcoming)
+          );
+        });
+      }
     }
 
     // 3. Completed Steps Drawer
     if (this.completedCountBadge) this.completedCountBadge.textContent = completedStones.length;
     if (this.completedStonesList) {
-      this.completedStonesList.innerHTML = '';
-      completedStones.forEach((stone) => {
-        this.completedStonesList.appendChild(this.createStoneListItem(stone));
-      });
+      const activeElement = document.activeElement;
+      const isEditingCompleted = this.completedStonesList.contains(activeElement);
+
+      if (!isEditingCompleted) {
+        this.completedStonesList.innerHTML = '';
+        completedStones.forEach((stone) => {
+          this.completedStonesList.appendChild(this.createStoneListItem(stone, true, true));
+        });
+      }
     }
   }
 
-  createStoneListItem(stone) {
+  createStoneListItem(stone, isTop, isBottom) {
     const li = document.createElement('li');
     li.className = 'stone-item';
+    li.setAttribute('data-stone-id', stone.id);
     li.setAttribute('data-completed', stone.completed ? 'true' : 'false');
 
     const checkbox = document.createElement('input');
@@ -308,22 +356,76 @@ class UIController {
     checkbox.className = 'stone-checkbox';
     checkbox.checked = stone.completed;
     checkbox.setAttribute('aria-label', `Mark "${stone.text}" as ${stone.completed ? 'incomplete' : 'complete'}`);
-    checkbox.addEventListener('change', () => store.toggleSteppingStone(stone.id));
+    checkbox.addEventListener('change', () => {
+      store.toggleSteppingStone(stone.id);
+      peerSync.broadcast();
+    });
 
-    const span = document.createElement('span');
-    span.className = 'stone-text';
-    span.textContent = stone.text;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'stone-text-input';
+    input.value = stone.text;
+    input.setAttribute('aria-label', `Edit task: ${stone.text}`);
+
+    const commitEdit = () => {
+      const val = input.value.trim();
+      if (val && val !== stone.text) {
+        store.updateSteppingStone(stone.id, val);
+        peerSync.broadcast();
+      }
+    };
+
+    input.addEventListener('change', commitEdit);
+    input.addEventListener('blur', commitEdit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+    });
+
+    const actionsContainer = document.createElement('div');
+    actionsContainer.className = 'stone-actions';
+
+    if (!stone.completed) {
+      const moveUpBtn = document.createElement('button');
+      moveUpBtn.type = 'button';
+      moveUpBtn.className = 'stone-move-btn';
+      moveUpBtn.innerHTML = '▲';
+      moveUpBtn.disabled = isTop;
+      moveUpBtn.setAttribute('aria-label', `Move "${stone.text}" up`);
+      moveUpBtn.addEventListener('click', () => {
+        store.moveSteppingStone(stone.id, 'up');
+        peerSync.broadcast();
+      });
+
+      const moveDownBtn = document.createElement('button');
+      moveDownBtn.type = 'button';
+      moveDownBtn.className = 'stone-move-btn';
+      moveDownBtn.innerHTML = '▼';
+      moveDownBtn.disabled = isBottom;
+      moveDownBtn.setAttribute('aria-label', `Move "${stone.text}" down`);
+      moveDownBtn.addEventListener('click', () => {
+        store.moveSteppingStone(stone.id, 'down');
+        peerSync.broadcast();
+      });
+
+      actionsContainer.appendChild(moveUpBtn);
+      actionsContainer.appendChild(moveDownBtn);
+    }
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className = 'stone-delete-btn';
     deleteBtn.setAttribute('aria-label', `Delete "${stone.text}"`);
     deleteBtn.innerHTML = '&times;';
-    deleteBtn.addEventListener('click', () => store.deleteSteppingStone(stone.id));
+    deleteBtn.addEventListener('click', () => {
+      store.deleteSteppingStone(stone.id);
+      peerSync.broadcast();
+    });
+
+    actionsContainer.appendChild(deleteBtn);
 
     li.appendChild(checkbox);
-    li.appendChild(span);
-    li.appendChild(deleteBtn);
+    li.appendChild(input);
+    li.appendChild(actionsContainer);
     return li;
   }
 
@@ -369,6 +471,10 @@ class UIController {
     }
   }
 
+  /**
+   * Non-destructive in-place DOM reconciliation for remote squad cards
+   * Prevents hover flickering on "Copy Steps" and retains accordion open states.
+   */
   renderPeerGrid(peers) {
     if (!this.peerSection || !this.peerGrid) return;
     const peerEntries = Object.entries(peers);
@@ -380,17 +486,53 @@ class UIController {
     }
 
     this.peerSection.style.display = 'flex';
-    this.peerGrid.innerHTML = '';
 
+    // 1. Remove departed peers
+    const activePeerIds = new Set(Object.keys(peers));
+    const currentCards = this.peerGrid.querySelectorAll('[data-peer-card-id]');
+    currentCards.forEach((card) => {
+      const id = card.getAttribute('data-peer-card-id');
+      if (!activePeerIds.has(id)) {
+        card.remove();
+      }
+    });
+
+    // 2. Insert or update existing cards in-place
     peerEntries.forEach(([peerId, data]) => {
-      const card = document.createElement('article');
-      card.className = 'peer-card';
-      card.style.setProperty('--peer-accent', data.avatarColor || '#38bdf8');
-
+      let card = this.peerGrid.querySelector(`[data-peer-card-id="${peerId}"]`);
       const totalStones = data.quest?.totalStones || 0;
       const completedStones = data.quest?.completedStones || 0;
       const progressPercent = totalStones > 0 ? Math.round((completedStones / totalStones) * 100) : 0;
       const hasStonesToCopy = Array.isArray(data.quest?.stones) && data.quest.stones.length > 0;
+      const stones = Array.isArray(data.quest?.stones) ? data.quest.stones : [];
+
+      if (!card) {
+        card = document.createElement('article');
+        card.className = 'peer-card';
+        card.setAttribute('data-peer-card-id', peerId);
+        this.peerGrid.appendChild(card);
+      }
+
+      card.style.setProperty('--peer-accent', data.avatarColor || '#38bdf8');
+
+      // Preserve inspection drawer state across sync ticks
+      const existingDrawer = card.querySelector('.peer-stones-drawer');
+      const wasOpen = existingDrawer ? existingDrawer.hasAttribute('open') : false;
+
+      // Generate step preview markup
+      let previewItemsHtml = '';
+      if (stones.length > 0) {
+        const firstUncompleted = stones.find((s) => !s.completed);
+        previewItemsHtml = stones
+          .map((s) => {
+            const isActive = firstUncompleted && s.id === firstUncompleted.id;
+            const completedAttr = s.completed ? 'data-completed="true"' : '';
+            const activeAttr = isActive ? 'data-active="true"' : '';
+            const prefix = s.completed ? '✓' : (isActive ? '▶' : '•');
+            return `<li class="peer-preview-item" ${completedAttr} ${activeAttr}><span>${prefix}</span> ${this.escapeHtml(s.text)}</li>`;
+          })
+          .join('');
+      }
 
       card.innerHTML = `
         <div class="peer-card-header">
@@ -408,9 +550,16 @@ class UIController {
           <span class="peer-stats-badge">${completedStones}/${totalStones} (${progressPercent}%)</span>
           ${hasStonesToCopy ? `<button type="button" class="peer-copy-btn" data-peer-id="${peerId}" title="Copy this checklist">Copy Steps</button>` : ''}
         </div>
-      `;
 
-      this.peerGrid.appendChild(card);
+        ${hasStonesToCopy ? `
+          <details class="peer-stones-drawer" ${wasOpen ? 'open' : ''}>
+            <summary class="peer-stones-summary">Inspect Process (${stones.length} steps)</summary>
+            <ul class="peer-stone-preview-list">
+              ${previewItemsHtml}
+            </ul>
+          </details>
+        ` : ''}
+      `;
     });
   }
 
