@@ -1,6 +1,6 @@
 /**
  * Rally - Application Bootstrap & Orchestrator
- * Connects store subscriptions, worker communication, P2P room events, and Wake Lock.
+ * Connects worker lifecycle, distinct audio transitions, P2P coordination, and Wake Lock.
  */
 
 import { store } from './state.js';
@@ -22,7 +22,7 @@ class Application {
   }
 
   /**
-   * Initializes the Web Worker to maintain accurate background countdown execution
+   * Initializes the Web Worker for accurate background timing
    */
   initWorker() {
     try {
@@ -39,35 +39,48 @@ class Application {
         }
       };
     } catch (err) {
-      console.warn('Dedicated worker failed to load. Falling back to local timing:', err);
+      console.warn('Dedicated worker failed to load. Running local execution fallback:', err);
     }
   }
 
   /**
-   * Dispatches audio feedback and triggers sequence advances on session completion
+   * Dispatches phase-distinct audio cues and triggers auto-start transitions
    */
   handleSessionCompletion() {
+    const previousState = store.getState();
+    const previousMode = previousState.session.mode;
+
+    // Advance session and determine next phase
+    const { nextMode, nextRound, shouldAutoStart } = store.advanceSession();
     const state = store.getState();
+
+    // Trigger distinct acoustic cues based on transition type
     if (state.config.soundEnabled) {
-      sound.playCompletionChime();
+      if (nextMode === 'longRest') {
+        sound.playLongRestFanfare();
+      } else if (nextMode === 'shortRest') {
+        sound.playSprintComplete();
+      } else if (nextMode === 'sprint') {
+        sound.playRestComplete();
+      }
     }
 
-    const previousMode = state.session.mode;
-    ui.announce(`${ui.getModeLabel(previousMode)} completed.`);
+    ui.announce(`${ui.getModeLabel(previousMode)} completed. Now starting ${ui.getModeLabel(nextMode)}.`);
 
-    this.releaseWakeLock();
-    store.advanceSession();
+    if (!shouldAutoStart) {
+      this.releaseWakeLock();
+    }
+
     peerSync.broadcast();
   }
 
   /**
-   * Subscribes the UI and background worker to reactive state changes
+   * Subscribes UI and worker to state changes
    */
   subscribeToStore() {
     store.subscribe((state) => {
       ui.render(state);
 
-      // Synchronize state with worker commands
       if (this.worker) {
         if (state.session.status === 'running') {
           this.worker.postMessage({
@@ -86,7 +99,7 @@ class Application {
   }
 
   /**
-   * Attaches event listeners to interactive DOM elements
+   * Binds interactive DOM buttons and modal controls
    */
   bindDOMEvents() {
     // Primary Start / Pause button
@@ -114,8 +127,7 @@ class Application {
     const skipBtn = document.getElementById('skip-btn');
     skipBtn.addEventListener('click', () => {
       sound.playTactileClick();
-      store.advanceSession();
-      peerSync.broadcast();
+      this.handleSessionCompletion();
     });
 
     // Quest Title input
@@ -160,14 +172,24 @@ class Application {
 
       const displayName = document.getElementById('display-name-input').value;
       const sprintMins = parseInt(document.getElementById('sprint-duration').value, 10);
-      const restMins = parseInt(document.getElementById('rest-duration').value, 10);
+      const shortRestMins = parseInt(document.getElementById('short-rest-duration').value, 10);
+      const longRestMins = parseInt(document.getElementById('long-rest-duration').value, 10);
+      const roundsBeforeLong = parseInt(document.getElementById('rounds-before-long').value, 10);
+      const totalRounds = parseInt(document.getElementById('total-rounds').value, 10);
+      const autoStartBreaks = document.getElementById('auto-start-breaks').checked;
+      const autoStartSprints = document.getElementById('auto-start-sprints').checked;
       const direction = document.getElementById('timer-direction-select').value;
       const soundEnabled = document.getElementById('sound-toggle').checked;
 
       store.updateProfile(displayName);
       store.updateConfig({
         sprintDurationMinutes: Math.max(1, sprintMins || 25),
-        restDurationMinutes: Math.max(1, restMins || 5),
+        shortRestDurationMinutes: Math.max(1, shortRestMins || 5),
+        longRestDurationMinutes: Math.max(1, longRestMins || 15),
+        roundsBeforeLongRest: Math.max(1, roundsBeforeLong || 4),
+        totalRounds: Math.max(0, totalRounds ?? 4),
+        autoStartBreaks,
+        autoStartSprints,
         timerDirection: direction,
         soundEnabled,
       });
@@ -176,7 +198,7 @@ class Application {
       peerSync.broadcast();
     });
 
-    // Room Modal & Collaboration
+    // Squad Room Modal & Sharing
     const roomBtn = document.getElementById('room-btn');
     const closeRoomBtn = document.getElementById('close-room-btn');
     const copyLinkBtn = document.getElementById('copy-link-btn');
@@ -187,7 +209,6 @@ class Application {
       sound.playTactileClick();
       const currentRoom = store.getState().room.roomId;
       if (!currentRoom) {
-        // Auto-create room if clicking while solo
         await peerSync.createRoom();
       }
       ui.openRoom();
@@ -226,25 +247,21 @@ class Application {
   }
 
   /**
-   * Auto-joins a room if a hash parameter is present in the URL
+   * Auto-joins a room if a room hash parameter is present in the URL
    */
-  checkRoomHash() {
+  async checkRoomHash() {
     const hash = window.location.hash;
     const match = hash.match(/room=([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
       const targetRoom = match[1];
-      // Delay slightly to let PeerJS script initialize
-      setTimeout(() => {
-        peerSync.joinRoom(targetRoom).catch((err) => {
-          console.warn('Could not auto-join room from hash:', err);
-        });
-      }, 500);
+      try {
+        await peerSync.joinRoom(targetRoom);
+      } catch (err) {
+        console.warn('Could not auto-join room from URL hash:', err);
+      }
     }
   }
 
-  /**
-   * Registers global keyboard shortcuts
-   */
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
@@ -266,15 +283,11 @@ class Application {
         peerSync.broadcast();
       } else if (e.code === 'KeyS' && e.altKey) {
         e.preventDefault();
-        store.advanceSession();
-        peerSync.broadcast();
+        this.handleSessionCompletion();
       }
     });
   }
 
-  /**
-   * Manages Screen Wake Lock API to prevent screens from sleeping during active sessions
-   */
   async requestWakeLock() {
     if ('wakeLock' in navigator && !this.wakeLockSentinel) {
       try {
@@ -283,7 +296,7 @@ class Application {
           this.wakeLockSentinel = null;
         });
       } catch (err) {
-        console.info('Screen Wake Lock could not be obtained:', err);
+        console.info('Wake lock request denied:', err);
       }
     }
   }
@@ -295,21 +308,17 @@ class Application {
     }
   }
 
-  /**
-   * Registers Service Worker for offline-first resilience
-   */
   registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker
           .register('./sw.js', { scope: './' })
-          .catch((err) => console.warn('ServiceWorker registration failed:', err));
+          .catch((err) => console.warn('Service worker registration failed:', err));
       });
     }
   }
 }
 
-// Bootstrap on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   new Application();
 });
