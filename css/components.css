@@ -1,6 +1,6 @@
 /**
  * Rally - Component Styles
- * Room navigation, timer dial, Quest checklist, Peer presence grid, and modals.
+ * Room navigation, timer dial, rounds HUD, Quest checklist, Peer presence grid, and modals.
  */
 
 /* ==========================================================================
@@ -46,11 +46,24 @@
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
   transition: all var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
 }
 
-.room-btn[data-connected="true"] {
-  border-color: var(--color-success);
-  color: var(--text-primary);
+.room-btn[data-status="connected"] {
+  border-color: rgba(52, 211, 153, 0.4);
+  color: var(--color-success);
+}
+
+.room-btn[data-status="connecting"] {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: var(--color-sprint-accent);
+}
+
+.room-btn[data-status="disconnected"] {
+  border-color: var(--surface-border);
+  color: var(--text-secondary);
 }
 
 .room-btn:hover {
@@ -79,7 +92,7 @@
 }
 
 /* ==========================================================================
-   Timer Stage & Progress Dial
+   Timer Stage, Rounds HUD & Progress Dial
    ========================================================================== */
 .timer-stage {
   display: flex;
@@ -121,6 +134,15 @@
   text-align: center;
 }
 
+.round-indicator {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--space-2xs);
+}
+
 .timer-digits {
   font-size: var(--text-timer);
   font-weight: var(--font-weight-bold);
@@ -141,6 +163,43 @@
   text-transform: uppercase;
   color: var(--theme-accent);
   transition: all var(--transition-mode);
+}
+
+/* Visual Round Cycle Dots */
+.cycle-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--space-xs);
+  min-height: 8px;
+}
+
+.cycle-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background-color: var(--theme-track);
+  transition: all var(--transition-base);
+}
+
+.cycle-dot[data-active="true"] {
+  background-color: var(--theme-accent);
+  box-shadow: 0 0 8px var(--theme-glow);
+  transform: scale(1.25);
+}
+
+/* Phase Accent Tokens & Data-Theme Mode Hooks */
+[data-theme-mode="shortRest"] {
+  --app-bg: var(--color-rest-bg);
+  --theme-accent: var(--color-rest-accent);
+  --theme-glow: var(--color-rest-glow);
+}
+
+[data-theme-mode="longRest"] {
+  --app-bg: #0f1123;
+  --theme-accent: #a78bfa;
+  --theme-glow: rgba(167, 139, 250, 0.25);
 }
 
 /* ==========================================================================
