@@ -1,6 +1,6 @@
 /**
  * Rally - Application Bootstrap & Orchestrator
- * Connects worker lifecycle, distinct audio transitions, P2P coordination, and Wake Lock.
+ * Connects worker lifecycle, sound profile switching, task list cloning, and P2P mesh.
  */
 
 import { store } from './state.js';
@@ -54,7 +54,7 @@ class Application {
     const { nextMode, shouldAutoStart } = store.advanceSession();
     const state = store.getState();
 
-    // Trigger distinct acoustic cues based on the destination phase
+    // Trigger distinct acoustic cues based on the destination phase and active profile
     if (state.config.soundEnabled) {
       if (nextMode === 'longRest') {
         sound.playLongRestFanfare();
@@ -99,7 +99,7 @@ class Application {
   }
 
   /**
-   * Binds interactive DOM buttons, inputs, and modal controls
+   * Binds interactive DOM buttons, inputs, modal controls, and delegation
    */
   bindDOMEvents() {
     // 1. In-place Quick Nickname Editor (Header)
@@ -181,7 +181,30 @@ class Application {
       }
     });
 
-    // 8. Settings Modal Open / Close triggers
+    // 8. Squad Task List Cloning (Event Delegation on Peer Grid)
+    const peerGrid = document.getElementById('peer-grid');
+    if (peerGrid) {
+      peerGrid.addEventListener('click', (e) => {
+        const copyBtn = e.target.closest('.peer-copy-btn');
+        if (!copyBtn) return;
+
+        const peerId = copyBtn.getAttribute('data-peer-id');
+        const peers = store.getState().room.peers;
+        const targetPeer = peers[peerId];
+
+        if (targetPeer && Array.isArray(targetPeer.quest?.stones) && targetPeer.quest.stones.length > 0) {
+          sound.playTactileClick();
+          store.importSteppingStones(targetPeer.quest.stones, targetPeer.quest.title);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy Steps';
+          }, 2000);
+          peerSync.broadcast();
+        }
+      });
+    }
+
+    // 9. Settings Modal Open / Close triggers
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const settingsForm = document.getElementById('settings-form');
@@ -196,7 +219,7 @@ class Application {
       ui.closeSettings();
     });
 
-    // 9. Settings Form Submission (Second precision calculation)
+    // 10. Settings Form Submission (Second precision calculation & sound theme)
     settingsForm.addEventListener('submit', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -223,6 +246,7 @@ class Application {
       const autoStartSprints = document.getElementById('auto-start-sprints').checked;
       const direction = document.getElementById('timer-direction-select').value;
       const soundEnabled = document.getElementById('sound-toggle').checked;
+      const soundProfile = document.getElementById('sound-profile-select').value;
 
       store.updateConfig({
         sprintDurationSeconds: totalSprintSec,
@@ -234,13 +258,14 @@ class Application {
         autoStartSprints,
         timerDirection: direction,
         soundEnabled,
+        soundProfile,
       });
 
       ui.closeSettings();
       peerSync.broadcast();
     });
 
-    // 10. Squad Room Modal & Sharing
+    // 11. Squad Room Modal & Sharing
     const roomBtn = document.getElementById('room-btn');
     const closeRoomBtn = document.getElementById('close-room-btn');
     const copyLinkBtn = document.getElementById('copy-link-btn');
@@ -330,7 +355,7 @@ class Application {
   }
 
   /**
-   * Global keyboard shortcuts
+   * Global keyboard navigation & shortcuts
    */
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
