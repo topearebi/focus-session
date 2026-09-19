@@ -1,40 +1,52 @@
 /**
- * Focus Session - Dedicated Timing Web Worker
- * Runs countdown intervals on a background thread immune to main-thread throttling.
+ * Rally - Timing Web Worker
+ * Runs countdown and count-up loops on a background thread immune to main-thread throttling.
  */
 
 let timerInterval = null;
-let targetTimestamp = 0;
+let anchorTimestamp = 0;
+let direction = 'countdown';
 
-/**
- * Handle command dispatches from the main execution thread
- */
 self.onmessage = (event) => {
-  const { command, remainingMs, targetTime } = event.data;
+  const { command, remainingMs, targetTime, timerDirection } = event.data;
 
   switch (command) {
     case 'START':
-      // Prefer explicit targetTime if synchronized; fallback to computing from remainingMs
-      targetTimestamp = targetTime || (Date.now() + remainingMs);
-      
+      direction = timerDirection || 'countdown';
       clearInterval(timerInterval);
 
-      // High-frequency polling loop (200ms) guarantees sub-second precision
-      timerInterval = setInterval(() => {
-        const now = Date.now();
-        const currentRemaining = Math.max(0, targetTimestamp - now);
+      if (direction === 'countdown') {
+        anchorTimestamp = targetTime || (Date.now() + remainingMs);
 
-        self.postMessage({
-          type: 'TICK',
-          remainingMs: currentRemaining,
-        });
+        timerInterval = setInterval(() => {
+          const now = Date.now();
+          const currentRemaining = Math.max(0, anchorTimestamp - now);
 
-        if (currentRemaining <= 0) {
-          clearInterval(timerInterval);
-          timerInterval = null;
-          self.postMessage({ type: 'COMPLETE' });
-        }
-      }, 200);
+          self.postMessage({
+            type: 'TICK',
+            remainingMs: currentRemaining,
+          });
+
+          if (currentRemaining <= 0) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            self.postMessage({ type: 'COMPLETE' });
+          }
+        }, 200);
+      } else {
+        // Count-up / Flow mode
+        anchorTimestamp = targetTime || (Date.now() - remainingMs);
+
+        timerInterval = setInterval(() => {
+          const now = Date.now();
+          const elapsed = Math.max(0, now - anchorTimestamp);
+
+          self.postMessage({
+            type: 'TICK',
+            remainingMs: elapsed,
+          });
+        }, 200);
+      }
       break;
 
     case 'PAUSE':
@@ -46,6 +58,6 @@ self.onmessage = (event) => {
       break;
 
     default:
-      console.warn(`[Worker] Unrecognized command received: ${command}`);
+      console.warn(`[Worker] Unrecognized command: ${command}`);
   }
 };
