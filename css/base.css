@@ -1,6 +1,6 @@
 /**
- * Focus Session - Base Styles
- * Resets, safe-area viewport scaffolding, typography, and accessibility utilities.
+ * Rally - Base Styles
+ * Universal resets, safe-area viewport scaffolding, typography, and accessibility utilities.
  */
 
 /* ==========================================================================
@@ -33,11 +33,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   
-  /* Safe-area insets prevent UI clipping on notched devices & mobile home bars */
+  /* Prevent clipping against notches, dynamic islands, or mobile home indicator bars */
   padding-top: max(var(--space-md), env(safe-area-inset-top));
-  padding-bottom: max(var(--space-md), env(safe-area-inset-bottom));
+  padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
   padding-left: max(var(--space-md), env(safe-area-inset-left));
   padding-right: max(var(--space-md), env(safe-area-inset-right));
 
@@ -49,11 +49,21 @@ body {
   line-height: 1.5;
   letter-spacing: -0.011em;
 
-  /* Smooth ambient transition across session modes */
   transition: background-color var(--transition-mode), color var(--transition-mode);
   overflow-x: hidden;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Centralized App Container */
+#app {
+  width: 100%;
+  max-width: var(--max-content-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  flex: 1;
 }
 
 /* ==========================================================================
@@ -70,14 +80,14 @@ p {
   color: var(--text-secondary);
 }
 
-/* Ensure digits never jump horizontally during active countdown */
+/* Monospaced numerals prevent horizontal jitter during active countdowns */
 .numeric-tabular {
   font-variant-numeric: var(--font-variant-numeric);
   font-feature-settings: "tnum";
 }
 
 /* ==========================================================================
-   Interactive Primitives (Buttons & Form Elements)
+   Interactive Primitives (Buttons, Inputs, Dialogs)
    ========================================================================== */
 button {
   font-family: inherit;
@@ -100,17 +110,19 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
   background: transparent;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* ==========================================================================
-   Accessibility (a11y) & Focus Indicators
+   Accessibility & Screen Reader Utilities
    ========================================================================== */
-/* Keep regular mouse clicks outline-free, enforce high-contrast outline on keyboard nav */
 :focus {
   outline: none;
 }
@@ -121,7 +133,7 @@ select {
   border-radius: var(--radius-sm);
 }
 
-/* Screen reader announcement container: visually hidden but accessible */
+/* Hidden container for assistive screen reader live milestones */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -135,7 +147,7 @@ select {
 }
 
 /* ==========================================================================
-   Media & Embedded Primitives
+   Media Primitives
    ========================================================================== */
 svg {
   display: block;
