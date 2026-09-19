@@ -1,7 +1,7 @@
 /**
  * Rally - Component Styles
  * Room navigation, inline identity, timer dial, live sync pill, active step spotlight,
- * collapsible task drawers, Peer grid with process cloning, and accessible modals.
+ * collapsible task drawers, task editing/reordering, Peer process previews, and accessible modals.
  */
 
 /* ==========================================================================
@@ -407,10 +407,21 @@
   flex-direction: column;
 }
 
-.active-stone-text {
+.active-stone-input {
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  padding: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.active-stone-input:focus {
+  border-bottom-color: var(--theme-accent);
 }
 
 /* Collapsible Drawers */
@@ -474,7 +485,7 @@
 .stone-item {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   background-color: var(--surface-card-subtle);
@@ -515,39 +526,90 @@
   font-weight: var(--font-weight-bold);
 }
 
-.stone-text {
+/* In-place Editable Task Text Input */
+.stone-text-input {
   flex: 1;
   font-size: var(--text-sm);
   color: var(--text-primary);
   border: none;
   background: transparent;
   outline: none;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  transition: background-color var(--transition-fast);
+}
+
+.stone-text-input:focus {
+  background-color: var(--color-slate-900);
+  box-shadow: 0 0 0 1px var(--theme-accent);
 }
 
 .completed-list .stone-item {
   opacity: 0.6;
 }
 
-.completed-list .stone-text {
+.completed-list .stone-text-input {
   text-decoration: line-through;
   color: var(--text-muted);
 }
 
-.stone-delete-btn {
-  opacity: 0.3;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-xs);
+/* Task Reorder Actions */
+.stone-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.4;
   transition: opacity var(--transition-fast);
 }
 
-.stone-item:hover .stone-delete-btn {
-  opacity: 0.8;
+.stone-item:hover .stone-actions,
+.stone-item:focus-within .stone-actions {
+  opacity: 1;
+}
+
+.stone-move-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.stone-move-btn:hover {
+  background-color: var(--surface-card);
+  color: var(--text-primary);
+}
+
+.stone-move-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.stone-delete-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
 .stone-delete-btn:hover {
-  opacity: 1;
   color: var(--color-danger);
+  background-color: var(--surface-card);
 }
 
 .add-stone-form {
@@ -583,7 +645,7 @@
 }
 
 /* ==========================================================================
-   Multi-Peer Presence Grid with Process Sharing
+   Multi-Peer Presence Grid with Process Preview & Cloning
    ========================================================================== */
 .peer-section {
   width: 100%;
@@ -602,7 +664,7 @@
 
 .peer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-sm);
   width: 100%;
 }
@@ -617,6 +679,7 @@
   border-radius: var(--radius-md);
   position: relative;
   overflow: hidden;
+  transition: border-color var(--transition-base);
 }
 
 .peer-card::before {
@@ -664,6 +727,21 @@
   text-overflow: ellipsis;
 }
 
+.peer-progress-bar {
+  width: 100%;
+  height: 4px;
+  background-color: var(--theme-track);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.peer-progress-fill {
+  height: 100%;
+  background-color: var(--peer-accent, var(--theme-accent));
+  transition: width var(--transition-base);
+}
+
 .peer-footer-row {
   display: flex;
   align-items: center;
@@ -678,15 +756,16 @@
 }
 
 .peer-copy-btn {
-  height: 22px;
-  padding: 0 6px;
+  height: 24px;
+  padding: 0 8px;
   font-size: var(--text-2xs);
+  font-weight: var(--font-weight-medium);
   border-radius: var(--radius-xs);
   background-color: var(--surface-card-subtle);
   border: 1px solid var(--surface-border);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .peer-copy-btn:hover {
@@ -695,19 +774,69 @@
   border-color: var(--theme-accent);
 }
 
-.peer-progress-bar {
+/* Peer Process Preview Accordion */
+.peer-stones-drawer {
   width: 100%;
-  height: 4px;
-  background-color: var(--theme-track);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-top: 2px;
+  margin-top: 4px;
+  border-top: 1px solid var(--surface-border);
+  padding-top: 4px;
 }
 
-.peer-progress-fill {
-  height: 100%;
-  background-color: var(--peer-accent, var(--theme-accent));
-  transition: width var(--transition-base);
+.peer-stones-summary {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.peer-stones-summary::-webkit-details-marker {
+  display: none;
+}
+
+.peer-stones-summary::before {
+  content: '▸';
+  font-size: 8px;
+  display: inline-block;
+  transition: transform var(--transition-fast);
+}
+
+.peer-stones-drawer[open] .peer-stones-summary::before {
+  transform: rotate(90deg);
+}
+
+.peer-stone-preview-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.peer-preview-item {
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.peer-preview-item[data-active="true"] {
+  color: var(--theme-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.peer-preview-item[data-completed="true"] {
+  text-decoration: line-through;
+  color: var(--text-muted);
 }
 
 /* ==========================================================================
