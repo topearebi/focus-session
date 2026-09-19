@@ -1,11 +1,12 @@
 /**
- * Focus Session - Application Bootstrap & Orchestrator
- * Connects store subscriptions, worker communication, keyboard shortcuts, and Wake Lock.
+ * Rally - Application Bootstrap & Orchestrator
+ * Connects store subscriptions, worker communication, P2P room events, and Wake Lock.
  */
 
 import { store } from './state.js';
 import { ui } from './ui.js';
 import { sound } from './audio.js';
+import { peerSync } from './peer-sync.js';
 
 class Application {
   constructor() {
@@ -16,6 +17,7 @@ class Application {
     this.bindDOMEvents();
     this.bindKeyboardShortcuts();
     this.subscribeToStore();
+    this.checkRoomHash();
     this.registerServiceWorker();
   }
 
@@ -31,6 +33,7 @@ class Application {
 
         if (type === 'TICK') {
           store.updateRemaining(remainingMs);
+          peerSync.broadcast();
         } else if (type === 'COMPLETE') {
           this.handleSessionCompletion();
         }
@@ -50,10 +53,11 @@ class Application {
     }
 
     const previousMode = state.session.mode;
-    ui.announce(`${ui.getModeTitle(previousMode)} completed.`);
+    ui.announce(`${ui.getModeLabel(previousMode)} completed.`);
 
     this.releaseWakeLock();
     store.advanceSession();
+    peerSync.broadcast();
   }
 
   /**
@@ -70,6 +74,7 @@ class Application {
             command: 'START',
             remainingMs: state.session.remainingMs,
             targetTime: state.session.targetTimestamp,
+            timerDirection: state.config.timerDirection,
           });
           this.requestWakeLock();
         } else {
@@ -94,6 +99,7 @@ class Application {
       } else {
         store.startTimer();
       }
+      peerSync.broadcast();
     });
 
     // Reset button
@@ -101,6 +107,7 @@ class Application {
     resetBtn.addEventListener('click', () => {
       sound.playTactileClick();
       store.resetTimer();
+      peerSync.broadcast();
     });
 
     // Skip button
@@ -108,19 +115,31 @@ class Application {
     skipBtn.addEventListener('click', () => {
       sound.playTactileClick();
       store.advanceSession();
+      peerSync.broadcast();
     });
 
-    // Mode switch buttons
-    const modeButtons = document.querySelectorAll('.mode-btn');
-    modeButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
+    // Quest Title input
+    const questInput = document.getElementById('quest-title-input');
+    questInput.addEventListener('input', (e) => {
+      store.setQuestTitle(e.target.value);
+      peerSync.broadcast();
+    });
+
+    // Add Stepping Stone Form
+    const addStoneForm = document.getElementById('add-stone-form');
+    const newStoneInput = document.getElementById('new-stone-input');
+    addStoneForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = newStoneInput.value.trim();
+      if (text) {
         sound.playTactileClick();
-        const targetMode = btn.dataset.mode;
-        store.setMode(targetMode);
-      });
+        store.addSteppingStone(text);
+        newStoneInput.value = '';
+        peerSync.broadcast();
+      }
     });
 
-    // Settings modal interactions
+    // Settings Modal
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const settingsForm = document.getElementById('settings-form');
@@ -139,30 +158,95 @@ class Application {
       e.preventDefault();
       sound.playTactileClick();
 
-      const focusMinutes = parseInt(document.getElementById('focus-duration').value, 10);
-      const shortBreakMinutes = parseInt(document.getElementById('short-break-duration').value, 10);
-      const longBreakMinutes = parseInt(document.getElementById('long-break-duration').value, 10);
-      const autoStartBreaks = document.getElementById('auto-start-toggle').checked;
+      const displayName = document.getElementById('display-name-input').value;
+      const sprintMins = parseInt(document.getElementById('sprint-duration').value, 10);
+      const restMins = parseInt(document.getElementById('rest-duration').value, 10);
+      const direction = document.getElementById('timer-direction-select').value;
       const soundEnabled = document.getElementById('sound-toggle').checked;
 
+      store.updateProfile(displayName);
       store.updateConfig({
-        focusDurationMinutes: Math.max(1, focusMinutes || 25),
-        shortBreakDurationMinutes: Math.max(1, shortBreakMinutes || 5),
-        longBreakDurationMinutes: Math.max(1, longBreakMinutes || 15),
-        autoStartBreaks,
+        sprintDurationMinutes: Math.max(1, sprintMins || 25),
+        restDurationMinutes: Math.max(1, restMins || 5),
+        timerDirection: direction,
         soundEnabled,
       });
 
       ui.closeSettings();
+      peerSync.broadcast();
+    });
+
+    // Room Modal & Collaboration
+    const roomBtn = document.getElementById('room-btn');
+    const closeRoomBtn = document.getElementById('close-room-btn');
+    const copyLinkBtn = document.getElementById('copy-link-btn');
+    const leaveRoomBtn = document.getElementById('leave-room-btn');
+    const syncModeToggle = document.getElementById('sync-mode-toggle');
+
+    roomBtn.addEventListener('click', async () => {
+      sound.playTactileClick();
+      const currentRoom = store.getState().room.roomId;
+      if (!currentRoom) {
+        // Auto-create room if clicking while solo
+        await peerSync.createRoom();
+      }
+      ui.openRoom();
+    });
+
+    closeRoomBtn.addEventListener('click', () => {
+      sound.playTactileClick();
+      ui.closeRoom();
+    });
+
+    copyLinkBtn.addEventListener('click', async () => {
+      sound.playTactileClick();
+      const shareInput = document.getElementById('share-link-input');
+      try {
+        await navigator.clipboard.writeText(shareInput.value);
+        copyLinkBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyLinkBtn.textContent = 'Copy';
+        }, 2000);
+      } catch {
+        shareInput.select();
+        document.execCommand('copy');
+      }
+    });
+
+    leaveRoomBtn.addEventListener('click', () => {
+      sound.playTactileClick();
+      peerSync.leaveRoom();
+      ui.closeRoom();
+    });
+
+    syncModeToggle.addEventListener('change', (e) => {
+      store.setSyncTimers(e.target.checked);
+      peerSync.broadcast();
     });
   }
 
   /**
-   * Registers global keyboard shortcuts for power-user navigation
+   * Auto-joins a room if a hash parameter is present in the URL
+   */
+  checkRoomHash() {
+    const hash = window.location.hash;
+    const match = hash.match(/room=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const targetRoom = match[1];
+      // Delay slightly to let PeerJS script initialize
+      setTimeout(() => {
+        peerSync.joinRoom(targetRoom).catch((err) => {
+          console.warn('Could not auto-join room from hash:', err);
+        });
+      }, 500);
+    }
+  }
+
+  /**
+   * Registers global keyboard shortcuts
    */
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
-      // Ignore key shortcuts if a text or number input is focused
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
         return;
       }
@@ -175,12 +259,15 @@ class Application {
         } else {
           store.startTimer();
         }
+        peerSync.broadcast();
       } else if (e.code === 'KeyR' && e.altKey) {
         e.preventDefault();
         store.resetTimer();
+        peerSync.broadcast();
       } else if (e.code === 'KeyS' && e.altKey) {
         e.preventDefault();
         store.advanceSession();
+        peerSync.broadcast();
       }
     });
   }
@@ -196,7 +283,6 @@ class Application {
           this.wakeLockSentinel = null;
         });
       } catch (err) {
-        // May fail if battery saver is on or user switches away
         console.info('Screen Wake Lock could not be obtained:', err);
       }
     }
@@ -223,7 +309,7 @@ class Application {
   }
 }
 
-// Bootstrap application on DOM ready
+// Bootstrap on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   new Application();
 });
