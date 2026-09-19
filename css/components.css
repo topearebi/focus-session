@@ -1,6 +1,6 @@
 /**
  * Rally - Component Styles
- * Room navigation, timer dial, rounds HUD, Quest checklist, Peer presence grid, and modals.
+ * Room navigation, inline identity, timer dial, live sync pill, Quest checklist, Peer grid, and modals.
  */
 
 /* ==========================================================================
@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   padding: var(--space-xs) 0;
   z-index: var(--z-nav);
 }
@@ -24,16 +24,59 @@
   font-size: var(--text-base);
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .brand-badge svg {
   color: var(--theme-accent);
 }
 
+/* Inline Quick Nickname Input */
+.inline-user-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-full);
+  padding: 0 10px;
+  height: 38px;
+  transition: all var(--transition-base);
+  max-width: 180px;
+  flex: 1;
+}
+
+.inline-user-container:hover,
+.inline-user-container:focus-within {
+  border-color: var(--theme-accent);
+  background-color: var(--surface-card-subtle);
+}
+
+.inline-user-container svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.inline-name-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+}
+
+.inline-name-input::placeholder {
+  color: var(--text-muted);
+}
+
 .header-actions {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
+  flex-shrink: 0;
 }
 
 .room-btn {
@@ -111,7 +154,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  transform: rotate(-90deg); /* Start at 12 o'clock */
+  transform: rotate(-90deg); /* 12 o'clock start */
 }
 
 .progress-ring-bg {
@@ -189,7 +232,7 @@
   transform: scale(1.25);
 }
 
-/* Phase Accent Tokens & Data-Theme Mode Hooks */
+/* Dynamic Phase Themes */
 [data-theme-mode="shortRest"] {
   --app-bg: var(--color-rest-bg);
   --theme-accent: var(--color-rest-accent);
@@ -203,7 +246,7 @@
 }
 
 /* ==========================================================================
-   Control Actions Bar
+   Control Actions Bar & Live Sync Banner
    ========================================================================== */
 .controls-bar {
   display: flex;
@@ -249,6 +292,43 @@
   color: var(--text-primary);
   background-color: var(--surface-card);
   border-color: var(--surface-border);
+}
+
+/* Live Timer Sync Banner */
+.sync-banner {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: -6px;
+  animation: fadeIn 200ms ease-out forwards;
+}
+
+.sync-toggle-btn {
+  height: 34px;
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-full);
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--transition-base);
+}
+
+.sync-toggle-btn:hover {
+  background-color: var(--surface-card-subtle);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+}
+
+.sync-toggle-btn[data-active="true"] {
+  border-color: var(--theme-accent);
+  color: var(--text-primary);
+  background-color: rgba(251, 191, 36, 0.08);
+  box-shadow: 0 0 12px -2px var(--theme-glow);
 }
 
 /* ==========================================================================
@@ -408,7 +488,7 @@
 }
 
 /* ==========================================================================
-   Multi-Peer Presence Grid (Body Doubling / Shared Squad)
+   Multi-Peer Presence Grid (Body Doubling Room Roster)
    ========================================================================== */
 .peer-section {
   width: 100%;
@@ -611,4 +691,9 @@
   display: flex;
   gap: var(--space-xs);
   margin-top: var(--space-xs);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
