@@ -1,6 +1,6 @@
 /**
- * Rally - Serverless Multi-Peer Sync Engine
- * Coordinates real-time room mesh via WebRTC DataChannels (PeerJS).
+ * Rally - Hardened Serverless Multi-Peer Sync Engine
+ * P2P DataChannel mesh with host relay, ping keep-alive, and auto-reconnection.
  */
 
 import { store } from './state.js';
@@ -10,39 +10,76 @@ class PeerSyncEngine {
     this.peer = null;
     this.connections = new Map(); // peerId -> DataConnection
     this.heartbeatInterval = null;
-    this.isInitialized = false;
+    this.pingInterval = null;
+    this.isConnecting = false;
+    this.reconnectAttempts = 0;
   }
 
   /**
-   * Initializes the local peer instance
+   * Ensures the PeerJS CDN script is fully parsed and available
+   */
+  async ensurePeerJSReady(timeoutMs = 8000) {
+    const startTime = Date.now();
+    while (typeof window.Peer === 'undefined') {
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error('Timed out waiting for PeerJS library to load.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
+   * Initializes local Peer instance with redundant STUN/TURN configurations
    */
   async initPeer(preferredId = null) {
-    if (this.peer && !this.peer.destroyed) return this.peer;
+    if (this.peer && !this.peer.destroyed && !this.peer.disconnected) {
+      return this.peer.id;
+    }
+
+    await this.ensurePeerJSReady();
 
     return new Promise((resolve, reject) => {
-      // Generate a clean room ID prefix if none provided
       const id = preferredId || `rally-${Math.random().toString(36).slice(2, 9)}`;
-      
-      // Fallback cleanly if PeerJS library is loading via CDN
-      if (typeof window.Peer === 'undefined') {
-        return reject(new Error('PeerJS not loaded.'));
-      }
 
-      this.peer = new window.Peer(id, {
+      const peerConfig = {
         debug: 1,
-      });
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'turn:eu-0.turn.peerjs.com:3478', username: 'peerjs', credential: 'peerjspassword' },
+          ],
+        },
+      };
+
+      this.peer = new window.Peer(id, peerConfig);
 
       this.peer.on('open', (assignedId) => {
-        this.isInitialized = true;
+        store.setConnectionStatus('connected');
+        this.reconnectAttempts = 0;
         this.setupIncomingListener();
+        this.startSignalingKeepAlive();
         resolve(assignedId);
       });
 
+      this.peer.on('disconnected', () => {
+        store.setConnectionStatus('connecting');
+        this.attemptReconnect();
+      });
+
+      this.peer.on('close', () => {
+        store.setConnectionStatus('disconnected');
+        this.cleanup();
+      });
+
       this.peer.on('error', (err) => {
-        console.warn('[PeerSync] Connection error:', err);
-        // If preferred ID is taken, fallback to random
+        console.warn('[PeerSync] Broker error:', err);
         if (err.type === 'unavailable-id' && preferredId) {
           this.initPeer(null).then(resolve).catch(reject);
+        } else if (err.type === 'peer-unavailable') {
+          store.setConnectionStatus('disconnected');
+          reject(new Error('Room host is offline or room does not exist.'));
         } else {
           reject(err);
         }
@@ -51,7 +88,7 @@ class PeerSyncEngine {
   }
 
   /**
-   * Handles incoming peer connections
+   * Listens for incoming WebRTC DataChannel connections
    */
   setupIncomingListener() {
     this.peer.on('connection', (conn) => {
@@ -60,14 +97,23 @@ class PeerSyncEngine {
   }
 
   /**
-   * Configures event listeners for each connected peer DataChannel
+   * Configures handlers on each individual DataChannel
    */
   attachConnectionHandlers(conn) {
     conn.on('open', () => {
       this.connections.set(conn.peer, conn);
-      // Immediately send our local state payload to the newcomer
+      store.setConnectionStatus('connected');
+
+      // 1. Send immediate local state snapshot
       this.sendStateTo(conn);
-      this.ensureHeartbeat();
+
+      // 2. If we are the room host, relay the full peer roster to coordinate full mesh
+      const { isHost } = store.getState().room;
+      if (isHost) {
+        this.relayMeshDirectory();
+      }
+
+      this.ensureDataHeartbeat();
     });
 
     conn.on('data', (data) => {
@@ -77,67 +123,128 @@ class PeerSyncEngine {
     conn.on('close', () => {
       this.connections.delete(conn.peer);
       store.removePeer(conn.peer);
+      if (this.connections.size === 0 && !store.getState().room.isHost) {
+        store.setConnectionStatus('disconnected');
+      }
     });
 
     conn.on('error', (err) => {
-      console.warn(`[PeerSync] Connection error with peer ${conn.peer}:`, err);
+      console.warn(`[PeerSync] Channel error with ${conn.peer}:`, err);
       this.connections.delete(conn.peer);
       store.removePeer(conn.peer);
     });
   }
 
   /**
-   * Create a new room as Host
+   * Host-only: Introduces all connected peers to each other
+   */
+  relayMeshDirectory() {
+    const activePeerIds = Array.from(this.connections.keys());
+    const packet = {
+      type: 'PEER_DIRECTORY',
+      peers: activePeerIds,
+    };
+
+    for (const conn of this.connections.values()) {
+      if (conn.open) {
+        conn.send(packet);
+      }
+    }
+  }
+
+  /**
+   * Creates a new Squad Room as the Host
    */
   async createRoom() {
+    store.setConnectionStatus('connecting');
     const roomId = await this.initPeer();
     store.setRoomId(roomId, true);
     this.updateLocationHash(roomId);
-    this.ensureHeartbeat();
+    this.ensureDataHeartbeat();
     return roomId;
   }
 
   /**
-   * Join an existing room as a Guest
+   * Joins an existing Squad Room as a Guest
    */
   async joinRoom(targetRoomId) {
-    await this.initPeer();
-    store.setRoomId(targetRoomId, false);
+    if (this.isConnecting) return;
+    this.isConnecting = true;
+    store.setConnectionStatus('connecting');
 
-    const conn = this.peer.connect(targetRoomId, {
-      reliable: true,
-    });
+    try {
+      await this.initPeer();
+      store.setRoomId(targetRoomId, false);
 
-    this.attachConnectionHandlers(conn);
-    this.updateLocationHash(targetRoomId);
-    this.ensureHeartbeat();
+      const conn = this.peer.connect(targetRoomId, {
+        reliable: true,
+      });
+
+      this.attachConnectionHandlers(conn);
+      this.updateLocationHash(targetRoomId);
+      this.ensureDataHeartbeat();
+    } catch (err) {
+      store.setConnectionStatus('disconnected');
+      throw err;
+    } finally {
+      this.isConnecting = false;
+    }
   }
 
   /**
-   * Leaves the active room and terminates all peer connections
+   * Leaves the active room and releases resources
    */
   leaveRoom() {
-    clearInterval(this.heartbeatInterval);
-    this.heartbeatInterval = null;
-
-    for (const conn of this.connections.values()) {
-      conn.close();
-    }
-    this.connections.clear();
-
-    if (this.peer) {
-      this.peer.destroy();
-      this.peer = null;
-    }
-
-    this.isInitialized = false;
+    this.cleanup();
     store.setRoomId(null, false);
+    store.setConnectionStatus('disconnected');
     this.updateLocationHash('');
   }
 
+  cleanup() {
+    clearInterval(this.heartbeatInterval);
+    clearInterval(this.pingInterval);
+    this.heartbeatInterval = null;
+    this.pingInterval = null;
+
+    for (const conn of this.connections.values()) {
+      try {
+        conn.close();
+      } catch (_) {}
+    }
+    this.connections.clear();
+
+    if (this.peer && !this.peer.destroyed) {
+      this.peer.destroy();
+      this.peer = null;
+    }
+  }
+
   /**
-   * Assembles current client state payload for broadcasting
+   * Prevents WebSocket idle timeout by pinging broker every 15s
    */
+  startSignalingKeepAlive() {
+    clearInterval(this.pingInterval);
+    this.pingInterval = setInterval(() => {
+      if (this.peer && !this.peer.disconnected && this.peer.socket && this.peer.socket._open) {
+        this.peer.socket.send({ type: 'PING' });
+      }
+    }, 15000);
+  }
+
+  attemptReconnect() {
+    if (this.reconnectAttempts >= 5) {
+      console.warn('[PeerSync] Max reconnection attempts reached.');
+      return;
+    }
+    this.reconnectAttempts++;
+    setTimeout(() => {
+      if (this.peer && this.peer.disconnected && !this.peer.destroyed) {
+        this.peer.reconnect();
+      }
+    }, 2000 * this.reconnectAttempts);
+  }
+
   getLocalPayload() {
     const state = store.getState();
     const activeStone = state.quest.stones.find((s) => !s.completed);
@@ -150,11 +257,12 @@ class PeerSyncEngine {
         title: state.quest.title || 'Untitled Quest',
         totalStones: state.quest.stones.length,
         completedStones: state.quest.stones.filter((s) => s.completed).length,
-        activeStone: activeStone ? activeStone.text : 'All stones complete!',
+        activeStone: activeStone ? activeStone.text : 'All stones completed!',
       },
       timer: {
         mode: state.session.mode,
         status: state.session.status,
+        currentRound: state.session.currentRound,
         remainingMs: state.session.remainingMs,
         targetTimestamp: state.session.targetTimestamp,
       },
@@ -165,18 +273,12 @@ class PeerSyncEngine {
     };
   }
 
-  /**
-   * Sends local state to a single connection
-   */
   sendStateTo(conn) {
     if (conn && conn.open) {
       conn.send(this.getLocalPayload());
     }
   }
 
-  /**
-   * Broadcasts local state to all connected peers
-   */
   broadcast() {
     const payload = this.getLocalPayload();
     for (const conn of this.connections.values()) {
@@ -186,13 +288,23 @@ class PeerSyncEngine {
     }
   }
 
-  /**
-   * Processes incoming data from remote peers
-   */
   handleIncomingData(senderId, data) {
-    if (!data || data.type !== 'SYNC_STATE') return;
+    if (!data) return;
 
-    // 1. Update peer directory
+    // Handle peer mesh introduction from Host
+    if (data.type === 'PEER_DIRECTORY' && Array.isArray(data.peers)) {
+      data.peers.forEach((peerId) => {
+        if (peerId !== this.peer?.id && !this.connections.has(peerId)) {
+          const directConn = this.peer.connect(peerId, { reliable: true });
+          this.attachConnectionHandlers(directConn);
+        }
+      });
+      return;
+    }
+
+    if (data.type !== 'SYNC_STATE') return;
+
+    // Update peer card
     store.updatePeer(senderId, {
       displayName: data.profile?.displayName || 'Teammate',
       avatarColor: data.profile?.avatarColor || '#38bdf8',
@@ -202,10 +314,13 @@ class PeerSyncEngine {
 
     const localState = store.getState();
 
-    // 2. Synchronize Master Timer if enabled and incoming payload is from Host
+    // Master clock synchronization
     if (localState.room.syncTimers && !localState.room.isHost && data.roomConfig?.isHost) {
-      if (localState.session.mode !== data.timer.mode) {
-        store.setMode(data.timer.mode);
+      if (
+        localState.session.mode !== data.timer.mode ||
+        localState.session.currentRound !== data.timer.currentRound
+      ) {
+        store.setMode(data.timer.mode, data.timer.currentRound);
       }
 
       store.updateRemaining(data.timer.remainingMs);
@@ -218,16 +333,13 @@ class PeerSyncEngine {
     }
   }
 
-  /**
-   * Heartbeat interval (transmits state every 2 seconds)
-   */
-  ensureHeartbeat() {
+  ensureDataHeartbeat() {
     if (!this.heartbeatInterval) {
       this.heartbeatInterval = setInterval(() => {
         if (this.connections.size > 0) {
           this.broadcast();
         }
-      }, 2000);
+      }, 1500);
     }
   }
 
