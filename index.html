@@ -148,10 +148,34 @@
         <span id="stones-counter" class="stones-counter">0 / 0</span>
       </div>
 
-      <ul id="stepping-stones-list" class="stepping-stones-list" aria-label="Stepping Stones List">
-        <!-- Dynamic stepping stones rendered via ui.js -->
-      </ul>
+      <!-- Active Step Spotlight (High-Visibility Next Action) -->
+      <div id="active-stone-container" class="active-stone-container">
+        <!-- Rendered dynamically by ui.js when an active stone exists -->
+      </div>
 
+      <!-- Upcoming Stepping Stones (Collapsible) -->
+      <details id="upcoming-stones-drawer" class="stones-drawer" open>
+        <summary class="stones-drawer-summary">
+          <span class="drawer-summary-title">Upcoming Steps</span>
+          <span id="upcoming-count-badge" class="count-badge">0</span>
+        </summary>
+        <ul id="stepping-stones-list" class="stepping-stones-list" aria-label="Upcoming Steps List">
+          <!-- Dynamic upcoming stepping stones rendered via ui.js -->
+        </ul>
+      </details>
+
+      <!-- Completed Stepping Stones (Collapsible, Default Closed) -->
+      <details id="completed-stones-drawer" class="stones-drawer">
+        <summary class="stones-drawer-summary">
+          <span class="drawer-summary-title">Completed Steps</span>
+          <span id="completed-count-badge" class="count-badge">0</span>
+        </summary>
+        <ul id="completed-stones-list" class="stepping-stones-list completed-list" aria-label="Completed Steps List">
+          <!-- Dynamic completed stepping stones rendered via ui.js -->
+        </ul>
+      </details>
+
+      <!-- Add Stepping Stone Form -->
       <form id="add-stone-form" class="add-stone-form">
         <input 
           type="text" 
@@ -249,9 +273,19 @@
         </select>
       </div>
 
+      <!-- Sound Notification & Acoustic Profile -->
       <div class="form-row">
         <label for="sound-toggle" class="form-label">Sound Notifications</label>
         <input type="checkbox" id="sound-toggle" class="switch-input" checked />
+      </div>
+
+      <div class="form-row">
+        <label for="sound-profile-select" class="form-label">Acoustic Theme</label>
+        <select id="sound-profile-select" class="form-input" style="width: 155px; text-align: left;">
+          <option value="warm">Harmonic Warmth</option>
+          <option value="crisp">Crisp / Energetic</option>
+          <option value="minimal">Minimalist / Wooden</option>
+        </select>
       </div>
 
       <footer class="modal-footer">
