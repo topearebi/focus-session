@@ -1,6 +1,6 @@
 /**
- * Focus Session - Web Audio Synthesizer
- * Zero-dependency acoustic chimes generated via native Web Audio API oscillators.
+ * Rally - Web Audio Synthesizer
+ * Zero-dependency acoustic chimes, tactile clicks, and alert tones generated via Web Audio API.
  */
 
 class SoundEngine {
@@ -10,8 +10,7 @@ class SoundEngine {
   }
 
   /**
-   * Initializes or resumes the AudioContext on first user interaction.
-   * Browsers block autoplay until an explicit user action occurs.
+   * Initializes or resumes the AudioContext on user interaction
    */
   initContext() {
     if (!this.ctx) {
@@ -29,16 +28,13 @@ class SoundEngine {
   }
 
   /**
-   * Plays a warm, resonant harmonic chime for session transitions.
-   * Uses fundamental sine waves (D5 -> A5) with exponential gain decay.
+   * Warm harmonic acoustic chime for standard round/sprint completions (D5 -> A5 -> F#6)
    */
   playCompletionChime() {
     this.initContext();
     if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
-
-    // Harmonic tones (D5 = ~587.33Hz, A5 = 880Hz, F#6 = ~1479.98Hz)
     const frequencies = [587.33, 880.0, 1479.98];
 
     frequencies.forEach((freq, index) => {
@@ -46,23 +42,52 @@ class SoundEngine {
       const gain = this.ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + index * 0.08);
+      osc.frequency.setValueAtTime(freq, now + index * 0.09);
 
-      // Smooth attack and exponential decay to eliminate audio clicks
-      gain.gain.setValueAtTime(0.0001, now + index * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.2 / (index + 1), now + index * 0.08 + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 1.6);
+      gain.gain.setValueAtTime(0.0001, now + index * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.22 / (index + 1), now + index * 0.09 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 1.5);
 
       osc.connect(gain);
       gain.connect(this.ctx.destination);
 
-      osc.start(now + index * 0.08);
-      osc.stop(now + index * 0.08 + 1.65);
+      osc.start(now + index * 0.09);
+      osc.stop(now + index * 0.09 + 1.55);
     });
   }
 
   /**
-   * Plays a subtle, tactile click sound for UI control feedback.
+   * Piercing double buzzer for physical tasks and noisy environments
+   */
+  playBuzzer() {
+    this.initContext();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const pulses = [0, 0.2];
+
+    pulses.forEach((offset) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, now + offset);
+      osc.frequency.setValueAtTime(330, now + offset + 0.08);
+
+      gain.gain.setValueAtTime(0.001, now + offset);
+      gain.gain.linearRampToValueAtTime(0.25, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.16);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.17);
+    });
+  }
+
+  /**
+   * Tactile click for UI actions and checkbox completions
    */
   playTactileClick() {
     this.initContext();
@@ -73,17 +98,17 @@ class SoundEngine {
     const gain = this.ctx.createGain();
 
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(320, now);
-    osc.frequency.exponentialRampToValueAtTime(160, now + 0.04);
+    osc.frequency.setValueAtTime(360, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.035);
 
-    gain.gain.setValueAtTime(0.05, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
 
     osc.start(now);
-    osc.stop(now + 0.045);
+    osc.stop(now + 0.04);
   }
 }
 
