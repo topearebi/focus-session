@@ -1,0 +1,322 @@
+/**
+ * Focus Session - Component Styles
+ * Mode navigation, SVG countdown dial, elevated control buttons, and settings modal.
+ */
+
+/* ==========================================================================
+   Header & Mode Selection Navigation
+   ========================================================================== */
+.app-header {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) 0;
+  z-index: var(--z-nav);
+}
+
+.mode-selector {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  padding: 4px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-sm);
+  transition: background-color var(--transition-mode), border-color var(--transition-base);
+}
+
+.mode-btn {
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  transition: all var(--transition-base);
+}
+
+.mode-btn:hover:not([aria-pressed="true"]) {
+  color: var(--text-primary);
+}
+
+.mode-btn[aria-pressed="true"] {
+  background-color: var(--theme-accent);
+  color: var(--color-slate-950);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.icon-btn:active {
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   Timer Stage & Radial Progress Ring
+   ========================================================================== */
+.timer-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: min(88vw, 360px);
+  height: min(88vw, 360px);
+  margin: var(--space-lg) 0;
+}
+
+.progress-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* Start countdown at 12 o'clock */
+}
+
+.progress-ring-bg {
+  stroke: var(--theme-track);
+}
+
+.progress-ring-indicator {
+  stroke: var(--theme-accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 300ms linear, stroke var(--transition-mode);
+  filter: drop-shadow(0 0 10px var(--theme-glow));
+}
+
+.timer-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.timer-display {
+  font-size: var(--text-timer);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+
+.session-label {
+  margin-top: var(--space-xs);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--theme-accent);
+  transition: color var(--transition-mode);
+}
+
+/* ==========================================================================
+   Control Bar & Action Buttons
+   ========================================================================== */
+.controls-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 360px;
+}
+
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.btn-primary {
+  min-width: 140px;
+  height: 54px;
+  padding: 0 var(--space-xl);
+  border-radius: var(--radius-full);
+  background-color: var(--theme-accent);
+  color: var(--color-slate-950);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 20px -2px var(--theme-glow);
+  transition: all var(--transition-base);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+.btn-ghost {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: all var(--transition-base);
+}
+
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+  border-color: var(--surface-border);
+}
+
+/* ==========================================================================
+   Cycle / Sequence Tracker
+   ========================================================================== */
+.cycle-tracker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.cycle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--theme-track);
+  border: 1px solid var(--surface-border);
+  transition: all var(--transition-base);
+}
+
+.cycle-dot[data-active="true"] {
+  background-color: var(--theme-accent);
+  box-shadow: 0 0 8px var(--theme-glow);
+  border-color: transparent;
+}
+
+/* ==========================================================================
+   Accessible Settings Modal (<dialog>)
+   ========================================================================== */
+.modal-dialog {
+  margin: auto;
+  padding: var(--space-xl);
+  background-color: var(--color-slate-850);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  max-width: 420px;
+  width: calc(100% - 32px);
+  box-shadow: var(--shadow-card);
+  z-index: var(--z-modal);
+}
+
+.modal-dialog::backdrop {
+  background-color: rgba(7, 9, 14, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.modal-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.form-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.form-input {
+  width: 80px;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-slate-900);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.form-input:focus-visible {
+  border-color: var(--theme-accent);
+}
+
+/* Custom accessible toggle switch */
+.switch-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 24px;
+  background-color: var(--color-slate-700);
+  border-radius: var(--radius-full);
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--transition-base);
+}
+
+.switch-input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: var(--color-white);
+  border-radius: var(--radius-full);
+  transition: transform var(--transition-base);
+}
+
+.switch-input:checked {
+  background-color: var(--theme-accent);
+}
+
+.switch-input:checked::after {
+  transform: translateX(20px);
+}
+
+.modal-footer {
+  margin-top: var(--space-xl);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
