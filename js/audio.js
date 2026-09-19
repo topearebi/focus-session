@@ -1,6 +1,6 @@
 /**
  * Rally - Web Audio Synthesizer
- * Zero-dependency acoustic chimes, tactile clicks, and alert tones generated via Web Audio API.
+ * Zero-dependency phase-distinct acoustic chimes, fanfares, and alerts.
  */
 
 class SoundEngine {
@@ -10,7 +10,7 @@ class SoundEngine {
   }
 
   /**
-   * Initializes or resumes the AudioContext on user interaction
+   * Initializes or resumes the AudioContext on first user interaction
    */
   initContext() {
     if (!this.ctx) {
@@ -28,66 +28,74 @@ class SoundEngine {
   }
 
   /**
-   * Warm harmonic acoustic chime for standard round/sprint completions (D5 -> A5 -> F#6)
+   * Helper: Plays a scheduled note with smooth exponential attack and decay
    */
-  playCompletionChime() {
+  scheduleTone(freq, start, duration, gainLevel = 0.2, type = 'sine') {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(gainLevel, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  /**
+   * Sprint / Focus Complete -> Relaxing descending chord (F5 -> C5 -> A4)
+   * Signals that effort is over and calm downshifting begins.
+   */
+  playSprintComplete() {
     this.initContext();
     if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
-    const frequencies = [587.33, 880.0, 1479.98];
-
-    frequencies.forEach((freq, index) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + index * 0.09);
-
-      gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-      gain.gain.exponentialRampToValueAtTime(0.22 / (index + 1), now + index * 0.09 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 1.5);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start(now + index * 0.09);
-      osc.stop(now + index * 0.09 + 1.55);
-    });
+    this.scheduleTone(698.46, now, 0.8, 0.22, 'sine');         // F5
+    this.scheduleTone(523.25, now + 0.14, 0.9, 0.20, 'sine');  // C5
+    this.scheduleTone(440.00, now + 0.30, 1.4, 0.25, 'sine');  // A4
   }
 
   /**
-   * Piercing double buzzer for physical tasks and noisy environments
+   * Rest Complete -> Energizing ascending triad (C5 -> E5 -> G5)
+   * Signals activation and return to focus.
    */
-  playBuzzer() {
+  playRestComplete() {
     this.initContext();
     if (!this.ctx) return;
 
     const now = this.ctx.currentTime;
-    const pulses = [0, 0.2];
-
-    pulses.forEach((offset) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(440, now + offset);
-      osc.frequency.setValueAtTime(330, now + offset + 0.08);
-
-      gain.gain.setValueAtTime(0.001, now + offset);
-      gain.gain.linearRampToValueAtTime(0.25, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.16);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.17);
-    });
+    this.scheduleTone(523.25, now, 0.5, 0.18, 'triangle');        // C5
+    this.scheduleTone(659.25, now + 0.12, 0.5, 0.20, 'triangle'); // E5
+    this.scheduleTone(783.99, now + 0.24, 1.2, 0.25, 'sine');     // G5
   }
 
   /**
-   * Tactile click for UI actions and checkbox completions
+   * Long Rest Reached -> Celebratory harmonic major chord fanfare (C5 -> E5 -> G5 -> C6)
+   * Acknowledges milestone completion across multiple rounds.
+   */
+  playLongRestFanfare() {
+    this.initContext();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    this.scheduleTone(523.25, now, 0.6, 0.16, 'triangle');        // C5
+    this.scheduleTone(659.25, now + 0.10, 0.6, 0.18, 'triangle'); // E5
+    this.scheduleTone(783.99, now + 0.20, 0.7, 0.20, 'triangle'); // G5
+    this.scheduleTone(1046.50, now + 0.32, 1.8, 0.26, 'sine');    // C6
+    // Ambient sub-bass swell
+    this.scheduleTone(261.63, now + 0.32, 1.6, 0.15, 'sine');     // C4
+  }
+
+  /**
+   * Tactile click for buttons and checklist progression
    */
   playTactileClick() {
     this.initContext();
@@ -109,6 +117,19 @@ class SoundEngine {
 
     osc.start(now);
     osc.stop(now + 0.04);
+  }
+
+  /**
+   * High-contrast piercing double alert for loud environments
+   */
+  playBuzzer() {
+    this.initContext();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    [0, 0.2].forEach((offset) => {
+      this.scheduleTone(440, now + offset, 0.16, 0.25, 'triangle');
+    });
   }
 }
 
