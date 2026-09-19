@@ -1,0 +1,149 @@
+/**
+ * Focus Session - Design Tokens
+ * System variables, WCAG AA/AAA compliant color palettes, fluid typography, and motion contracts.
+ */
+
+:root {
+  /* ==========================================================================
+     Color Primitives
+     ========================================================================== */
+  --color-slate-950: #07090e;
+  --color-slate-900: #0b0f17;
+  --color-slate-850: #111622;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-400: #94a3b8;
+  --color-slate-200: #e2e8f0;
+  --color-white: #ffffff;
+
+  /* Focus Mode Accents (Cool Cyan/Sky) */
+  --color-focus-base: #0284c7;
+  --color-focus-accent: #38bdf8;
+  --color-focus-glow: rgba(56, 189, 248, 0.18);
+  --color-focus-surface: rgba(15, 23, 42, 0.75);
+
+  /* Short Break Accents (Calming Emerald) */
+  --color-short-bg: #041a13;
+  --color-short-base: #059669;
+  --color-short-accent: #34d399;
+  --color-short-glow: rgba(52, 211, 153, 0.18);
+  --color-short-surface: rgba(6, 35, 26, 0.75);
+
+  /* Long Break Accents (Restorative Indigo/Violet) */
+  --color-long-bg: #090a1a;
+  --color-long-base: #7c3aed;
+  --color-long-accent: #a78bfa;
+  --color-long-glow: rgba(167, 139, 250, 0.18);
+  --color-long-surface: rgba(17, 18, 42, 0.75);
+
+  /* Semantic UI State Tokens (Default: Focus Mode) */
+  --app-bg: var(--color-slate-900);
+  --surface-card: var(--color-slate-850);
+  --surface-overlay: rgba(11, 15, 23, 0.85);
+  --surface-border: rgba(148, 163, 184, 0.12);
+
+  --text-primary: #f8fafc;
+  --text-secondary: var(--color-slate-400);
+  --text-muted: #64748b;
+
+  --theme-accent: var(--color-focus-accent);
+  --theme-glow: var(--color-focus-glow);
+  --theme-track: rgba(255, 255, 255, 0.06);
+
+  /* Danger / Reset States */
+  --color-danger: #f87171;
+  --color-danger-glow: rgba(248, 113, 113, 0.2);
+
+  /* ==========================================================================
+     Typography & Numeric Scale
+     ========================================================================== */
+  --font-family-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
+    Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Inter, sans-serif;
+  
+  /* Monospaced numerals prevent countdown jitter across second changes */
+  --font-variant-numeric: tabular-nums lining-nums;
+
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-timer: clamp(4rem, 16vw, 7.5rem);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ==========================================================================
+     Spacers & Grid Geometry
+     ========================================================================== */
+  --space-2xs: 0.25rem;   /* 4px */
+  --space-xs: 0.5rem;     /* 8px */
+  --space-sm: 0.75rem;    /* 12px */
+  --space-md: 1rem;       /* 16px */
+  --space-lg: 1.5rem;     /* 24px */
+  --space-xl: 2rem;       /* 32px */
+  --space-2xl: 3rem;      /* 48px */
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+
+  /* ==========================================================================
+     Focus, Elevation & Transitions
+     ========================================================================== */
+  --focus-ring: 0 0 0 3px var(--theme-accent);
+  --focus-offset: 3px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px -10px var(--theme-glow);
+
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-mode: 600ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --z-base: 1;
+  --z-nav: 10;
+  --z-modal: 50;
+  --z-toast: 100;
+}
+
+/* ==========================================================================
+   Dynamic Theme Overrides by Session Mode
+   ========================================================================== */
+
+[data-session-mode="focus"] {
+  --app-bg: var(--color-slate-900);
+  --surface-card: var(--color-slate-850);
+  --theme-accent: var(--color-focus-accent);
+  --theme-glow: var(--color-focus-glow);
+}
+
+[data-session-mode="shortBreak"] {
+  --app-bg: var(--color-short-bg);
+  --surface-card: var(--color-short-surface);
+  --theme-accent: var(--color-short-accent);
+  --theme-glow: var(--color-short-glow);
+}
+
+[data-session-mode="longBreak"] {
+  --app-bg: var(--color-long-bg);
+  --surface-card: var(--color-long-surface);
+  --theme-accent: var(--color-long-accent);
+  --theme-glow: var(--color-long-glow);
+}
+
+/* ==========================================================================
+   Accessibility: Reduced Motion Preference
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0.01ms !important;
+    --transition-base: 0.01ms !important;
+    --transition-mode: 0.01ms !important;
+  }
+}
