@@ -1,6 +1,6 @@
 /**
  * Rally - UI Controller & DOM Orchestrator
- * Manages inline identity editing, live timer sync pills, room code views, and squad grids.
+ * Manages active step spotlight, collapsible task drawers, acoustic settings, and squad process cloning.
  */
 
 import { dynamicFavicon } from './favicon.js';
@@ -31,10 +31,16 @@ class UIController {
     this.syncStatusIcon = document.getElementById('sync-status-icon');
     this.syncStatusLabel = document.getElementById('sync-status-label');
 
-    // Quest & Stepping Stone elements
+    // Quest, Spotlight & Drawer elements
     this.questTitleInput = document.getElementById('quest-title-input');
     this.stonesCounter = document.getElementById('stones-counter');
+    this.activeStoneContainer = document.getElementById('active-stone-container');
+    this.upcomingStonesDrawer = document.getElementById('upcoming-stones-drawer');
+    this.upcomingCountBadge = document.getElementById('upcoming-count-badge');
     this.steppingStonesList = document.getElementById('stepping-stones-list');
+    this.completedStonesDrawer = document.getElementById('completed-stones-drawer');
+    this.completedCountBadge = document.getElementById('completed-count-badge');
+    this.completedStonesList = document.getElementById('completed-stones-list');
 
     // Peer Grid elements
     this.peerSection = document.getElementById('peer-section');
@@ -54,6 +60,7 @@ class UIController {
     this.autoStartSprintsToggle = document.getElementById('auto-start-sprints');
     this.timerDirectionSelect = document.getElementById('timer-direction-select');
     this.soundToggle = document.getElementById('sound-toggle');
+    this.soundProfileSelect = document.getElementById('sound-profile-select');
 
     // Room Modal elements
     this.roomDialog = document.getElementById('room-dialog');
@@ -135,10 +142,10 @@ class UIController {
     document.title = `${timeFormatted} • Rally`;
     dynamicFavicon.update(normalizedRatio, mode);
 
-    // 7. Contextual Live Sync Banner (Shown only when in a room)
+    // 7. Contextual Live Sync Banner
     this.renderSyncBanner(room);
 
-    // 8. Current Quest & Stepping Stones
+    // 8. Current Quest & Stepping Stones (Spotlight + Drawers)
     if (document.activeElement !== this.questTitleInput) {
       this.questTitleInput.value = quest.title;
     }
@@ -171,6 +178,7 @@ class UIController {
       if (this.autoStartSprintsToggle) this.autoStartSprintsToggle.checked = config.autoStartSprints;
       if (this.timerDirectionSelect) this.timerDirectionSelect.value = config.timerDirection;
       if (this.soundToggle) this.soundToggle.checked = config.soundEnabled;
+      if (this.soundProfileSelect) this.soundProfileSelect.value = config.soundProfile || 'warm';
     }
 
     // 11. Screen-reader announcements
@@ -217,42 +225,106 @@ class UIController {
     }
   }
 
+  /**
+   * Renders the Active Focus spotlight and partitions steps into Upcoming and Completed drawers
+   */
   renderSteppingStones(stones) {
-    if (!this.steppingStonesList || !this.stonesCounter) return;
+    if (!this.stonesCounter) return;
 
-    const completedCount = stones.filter((s) => s.completed).length;
-    this.stonesCounter.textContent = `${completedCount} / ${stones.length}`;
+    const completedStones = stones.filter((s) => s.completed);
+    const pendingStones = stones.filter((s) => !s.completed);
+    this.stonesCounter.textContent = `${completedStones.length} / ${stones.length}`;
 
-    this.steppingStonesList.innerHTML = '';
+    // 1. Active Step Spotlight (First pending stone)
+    if (this.activeStoneContainer) {
+      this.activeStoneContainer.innerHTML = '';
+      if (pendingStones.length > 0) {
+        const activeStone = pendingStones[0];
+        const card = document.createElement('div');
+        card.className = 'active-stone-card';
 
-    stones.forEach((stone) => {
-      const li = document.createElement('li');
-      li.className = 'stone-item';
-      li.setAttribute('data-completed', stone.completed ? 'true' : 'false');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'stone-checkbox';
+        checkbox.checked = false;
+        checkbox.setAttribute('aria-label', `Complete active focus: "${activeStone.text}"`);
+        checkbox.addEventListener('change', () => store.toggleSteppingStone(activeStone.id));
 
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'stone-checkbox';
-      checkbox.checked = stone.completed;
-      checkbox.setAttribute('aria-label', `Mark "${stone.text}" as complete`);
-      checkbox.addEventListener('change', () => store.toggleSteppingStone(stone.id));
+        const body = document.createElement('div');
+        body.className = 'active-stone-body';
 
-      const span = document.createElement('span');
-      span.className = 'stone-text';
-      span.textContent = stone.text;
+        const label = document.createElement('span');
+        label.className = 'active-stone-label';
+        label.textContent = 'Current Focus';
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'stone-delete-btn';
-      deleteBtn.setAttribute('aria-label', `Delete "${stone.text}"`);
-      deleteBtn.innerHTML = '&times;';
-      deleteBtn.addEventListener('click', () => store.deleteSteppingStone(stone.id));
+        const text = document.createElement('span');
+        text.className = 'active-stone-text';
+        text.textContent = activeStone.text;
 
-      li.appendChild(checkbox);
-      li.appendChild(span);
-      li.appendChild(deleteBtn);
-      this.steppingStonesList.appendChild(li);
-    });
+        body.appendChild(label);
+        body.appendChild(text);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'stone-delete-btn';
+        deleteBtn.setAttribute('aria-label', `Delete "${activeStone.text}"`);
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.addEventListener('click', () => store.deleteSteppingStone(activeStone.id));
+
+        card.appendChild(checkbox);
+        card.appendChild(body);
+        card.appendChild(deleteBtn);
+        this.activeStoneContainer.appendChild(card);
+      }
+    }
+
+    // 2. Upcoming Steps Drawer (Subsequent pending stones)
+    const upcomingStones = pendingStones.slice(1);
+    if (this.upcomingCountBadge) this.upcomingCountBadge.textContent = upcomingStones.length;
+    if (this.steppingStonesList) {
+      this.steppingStonesList.innerHTML = '';
+      upcomingStones.forEach((stone) => {
+        this.steppingStonesList.appendChild(this.createStoneListItem(stone));
+      });
+    }
+
+    // 3. Completed Steps Drawer
+    if (this.completedCountBadge) this.completedCountBadge.textContent = completedStones.length;
+    if (this.completedStonesList) {
+      this.completedStonesList.innerHTML = '';
+      completedStones.forEach((stone) => {
+        this.completedStonesList.appendChild(this.createStoneListItem(stone));
+      });
+    }
+  }
+
+  createStoneListItem(stone) {
+    const li = document.createElement('li');
+    li.className = 'stone-item';
+    li.setAttribute('data-completed', stone.completed ? 'true' : 'false');
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'stone-checkbox';
+    checkbox.checked = stone.completed;
+    checkbox.setAttribute('aria-label', `Mark "${stone.text}" as ${stone.completed ? 'incomplete' : 'complete'}`);
+    checkbox.addEventListener('change', () => store.toggleSteppingStone(stone.id));
+
+    const span = document.createElement('span');
+    span.className = 'stone-text';
+    span.textContent = stone.text;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'stone-delete-btn';
+    deleteBtn.setAttribute('aria-label', `Delete "${stone.text}"`);
+    deleteBtn.innerHTML = '&times;';
+    deleteBtn.addEventListener('click', () => store.deleteSteppingStone(stone.id));
+
+    li.appendChild(checkbox);
+    li.appendChild(span);
+    li.appendChild(deleteBtn);
+    return li;
   }
 
   renderRoomStatus(room) {
@@ -274,7 +346,6 @@ class UIController {
       return;
     }
 
-    // Inside a room
     if (this.roomShareSection) this.roomShareSection.style.display = 'block';
     if (this.leaveRoomBtn) this.leaveRoomBtn.style.display = 'inline-flex';
     if (this.displayRoomCode) this.displayRoomCode.textContent = cleanCode || '—';
@@ -311,14 +382,15 @@ class UIController {
     this.peerSection.style.display = 'flex';
     this.peerGrid.innerHTML = '';
 
-    peerEntries.forEach(([_, data]) => {
+    peerEntries.forEach(([peerId, data]) => {
       const card = document.createElement('article');
       card.className = 'peer-card';
       card.style.setProperty('--peer-accent', data.avatarColor || '#38bdf8');
 
-      const progressPercent = data.quest?.totalStones > 0
-        ? Math.round((data.quest.completedStones / data.quest.totalStones) * 100)
-        : 0;
+      const totalStones = data.quest?.totalStones || 0;
+      const completedStones = data.quest?.completedStones || 0;
+      const progressPercent = totalStones > 0 ? Math.round((completedStones / totalStones) * 100) : 0;
+      const hasStonesToCopy = Array.isArray(data.quest?.stones) && data.quest.stones.length > 0;
 
       card.innerHTML = `
         <div class="peer-card-header">
@@ -327,8 +399,14 @@ class UIController {
         </div>
         <div class="peer-quest">${this.escapeHtml(data.quest?.title || 'No Quest set')}</div>
         <div class="peer-active-stone">${this.escapeHtml(data.quest?.activeStone || 'Idle')}</div>
+        
         <div class="peer-progress-bar">
           <div class="peer-progress-fill" style="width: ${progressPercent}%;"></div>
+        </div>
+
+        <div class="peer-footer-row">
+          <span class="peer-stats-badge">${completedStones}/${totalStones} (${progressPercent}%)</span>
+          ${hasStonesToCopy ? `<button type="button" class="peer-copy-btn" data-peer-id="${peerId}" title="Copy this checklist">Copy Steps</button>` : ''}
         </div>
       `;
 
