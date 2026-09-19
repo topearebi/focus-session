@@ -1,9 +1,9 @@
 /**
  * Rally - Reactive State Store & Persistence
- * Manages timer state, Quests, Stepping Stones, user profile, and peer roster.
+ * Manages rounds, long rests, auto-transitions, Quests, and peer presence.
  */
 
-const STORAGE_KEY = 'rally_state_v1';
+const STORAGE_KEY = 'rally_state_v2';
 
 const DEFAULT_STATE = {
   profile: {
@@ -12,13 +12,19 @@ const DEFAULT_STATE = {
   },
   config: {
     sprintDurationMinutes: 25,
-    restDurationMinutes: 5,
+    shortRestDurationMinutes: 5,
+    longRestDurationMinutes: 15,
+    roundsBeforeLongRest: 4,
+    totalRounds: 4, // 0 = infinite continuous rounds
+    autoStartBreaks: true,
+    autoStartSprints: false,
     timerDirection: 'countdown', // 'countdown' | 'countup'
     soundEnabled: true,
   },
   session: {
-    mode: 'sprint', // 'sprint' | 'rest'
+    mode: 'sprint', // 'sprint' | 'shortRest' | 'longRest'
     status: 'idle', // 'idle' | 'running' | 'paused'
+    currentRound: 1,
     remainingMs: 25 * 60 * 1000,
     totalDurationMs: 25 * 60 * 1000,
     targetTimestamp: null,
@@ -27,15 +33,16 @@ const DEFAULT_STATE = {
     title: '',
     stones: [
       { id: 'stone-1', text: 'Define the game plan', completed: false },
-      { id: 'stone-2', text: 'Execute step one', completed: false }
+      { id: 'stone-2', text: 'Execute step one', completed: false },
     ],
   },
   room: {
     roomId: null,
     isHost: false,
+    connectionStatus: 'disconnected', // 'disconnected' | 'connecting' | 'connected'
     syncTimers: false,
     peers: {}, // peerId -> peerState
-  }
+  },
 };
 
 class StateStore {
@@ -44,9 +51,6 @@ class StateStore {
     this.state = this.loadState();
   }
 
-  /**
-   * Loads state from localStorage and restores active countdown timestamps
-   */
   loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -58,10 +62,10 @@ class StateStore {
         config: { ...DEFAULT_STATE.config, ...parsed.config },
         session: { ...DEFAULT_STATE.session, ...parsed.session },
         quest: { ...DEFAULT_STATE.quest, ...parsed.quest },
-        room: structuredClone(DEFAULT_STATE.room), // Rooms are ephemeral per session
+        room: structuredClone(DEFAULT_STATE.room), // Room connections are ephemeral
       };
 
-      // Reconcile remaining time if it was running when reloaded
+      // Reconcile remaining time if it was running before page reload
       if (state.session.status === 'running' && state.session.targetTimestamp) {
         if (state.config.timerDirection === 'countdown') {
           const remaining = state.session.targetTimestamp - Date.now();
@@ -73,7 +77,6 @@ class StateStore {
             state.session.targetTimestamp = null;
           }
         } else {
-          // Count-up reconciliation
           const elapsed = Date.now() - state.session.targetTimestamp;
           state.session.remainingMs = Math.max(0, elapsed);
         }
@@ -81,14 +84,13 @@ class StateStore {
 
       return state;
     } catch (e) {
-      console.warn('Failed to parse local state, restoring defaults:', e);
+      console.warn('Failed to load state from localStorage, falling back to defaults:', e);
       return structuredClone(DEFAULT_STATE);
     }
   }
 
   persistState() {
     try {
-      // Don't persist transient room peer connections to disk
       const toPersist = {
         profile: this.state.profile,
         config: this.state.config,
@@ -130,16 +132,23 @@ class StateStore {
     this.state.config = { ...this.state.config, ...partialConfig };
 
     if (this.state.session.status === 'idle') {
-      const mode = this.state.session.mode;
-      const mins = mode === 'sprint' 
-        ? this.state.config.sprintDurationMinutes 
-        : this.state.config.restDurationMinutes;
-      const ms = mins * 60 * 1000;
-
+      const ms = this.getDurationForMode(this.state.session.mode);
       this.state.session.totalDurationMs = ms;
       this.state.session.remainingMs = this.state.config.timerDirection === 'countup' ? 0 : ms;
     }
     this.notify();
+  }
+
+  getDurationForMode(mode) {
+    switch (mode) {
+      case 'shortRest':
+        return this.state.config.shortRestDurationMinutes * 60 * 1000;
+      case 'longRest':
+        return this.state.config.longRestDurationMinutes * 60 * 1000;
+      case 'sprint':
+      default:
+        return this.state.config.sprintDurationMinutes * 60 * 1000;
+    }
   }
 
   /* ================= Current Quest & Stepping Stones ================= */
@@ -172,20 +181,20 @@ class StateStore {
     this.notify();
   }
 
-  /* ================= Timer Session Engine ================= */
-  setMode(mode) {
-    if (!['sprint', 'rest'].includes(mode)) return;
+  /* ================= Timer Session & Rounds Engine ================= */
+  setMode(mode, roundOverride = null) {
+    if (!['sprint', 'shortRest', 'longRest'].includes(mode)) return;
 
-    const mins = mode === 'sprint' 
-      ? this.state.config.sprintDurationMinutes 
-      : this.state.config.restDurationMinutes;
-    const ms = mins * 60 * 1000;
-
+    const ms = this.getDurationForMode(mode);
     this.state.session.mode = mode;
     this.state.session.status = 'idle';
     this.state.session.totalDurationMs = ms;
     this.state.session.remainingMs = this.state.config.timerDirection === 'countup' ? 0 : ms;
     this.state.session.targetTimestamp = null;
+
+    if (roundOverride !== null) {
+      this.state.session.currentRound = roundOverride;
+    }
 
     this.notify();
   }
@@ -200,7 +209,6 @@ class StateStore {
     if (this.state.config.timerDirection === 'countdown') {
       this.state.session.targetTimestamp = Date.now() + this.state.session.remainingMs;
     } else {
-      // In count-up, anchor to starting point minus elapsed
       this.state.session.targetTimestamp = Date.now() - this.state.session.remainingMs;
     }
     this.notify();
@@ -213,12 +221,45 @@ class StateStore {
   }
 
   resetTimer() {
-    this.setMode(this.state.session.mode);
+    this.setMode('sprint', 1);
   }
 
+  /**
+   * Evaluates the next mode in the cycle:
+   * Sprint -> Short Rest (or Long Rest if interval hit) -> Sprint (next round)
+   * @returns {Object} { nextMode, nextRound, shouldAutoStart }
+   */
   advanceSession() {
-    const nextMode = this.state.session.mode === 'sprint' ? 'rest' : 'sprint';
-    this.setMode(nextMode);
+    const current = this.state.session.mode;
+    const round = this.state.session.currentRound;
+    const { roundsBeforeLongRest, autoStartBreaks, autoStartSprints } = this.state.config;
+
+    let nextMode = 'sprint';
+    let nextRound = round;
+    let shouldAutoStart = false;
+
+    if (current === 'sprint') {
+      // Check if long rest interval reached
+      if (round % roundsBeforeLongRest === 0) {
+        nextMode = 'longRest';
+      } else {
+        nextMode = 'shortRest';
+      }
+      shouldAutoStart = autoStartBreaks;
+    } else {
+      // Exiting a rest period moves to the next sprint round
+      nextMode = 'sprint';
+      nextRound = round + 1;
+      shouldAutoStart = autoStartSprints;
+    }
+
+    this.setMode(nextMode, nextRound);
+
+    if (shouldAutoStart) {
+      this.startTimer();
+    }
+
+    return { nextMode, nextRound, shouldAutoStart };
   }
 
   /* ================= Shared Squad Room & Peers ================= */
@@ -227,7 +268,13 @@ class StateStore {
     this.state.room.isHost = isHost;
     if (!roomId) {
       this.state.room.peers = {};
+      this.state.room.connectionStatus = 'disconnected';
     }
+    this.notify();
+  }
+
+  setConnectionStatus(status) {
+    this.state.room.connectionStatus = status;
     this.notify();
   }
 
