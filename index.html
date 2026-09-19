@@ -1,161 +1,157 @@
 <!DOCTYPE html>
-<html lang="en" data-session-mode="focus">
+<html lang="en" data-theme-mode="sprint">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta http-equiv="X-UA-Compatible" content="ie=edge" />
 
-  <title>Focus Session</title>
-  <meta name="description" content="A minimal, resilient focus and Pomodoro timer designed for deep work." />
+  <title>Rally • Shared Focus & Action Timers</title>
+  <meta name="description" content="A flexible focus companion for deep work, speed sessions, games, and shared body doubling." />
 
-  <!-- PWA & Mobile Meta Tags -->
-  <meta name="theme-color" content="#0B0F17" />
+  <!-- Mobile Viewport & PWA Capabilities -->
+  <meta name="theme-color" content="#0D0F17" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Focus" />
+  <meta name="apple-mobile-web-app-title" content="Rally" />
 
-  <!-- Web App Manifest & Dynamic Icons -->
+  <!-- Manifest & Dynamic Favicon Hook -->
   <link rel="manifest" href="./manifest.webmanifest" />
   <link id="favicon-link" rel="icon" type="image/svg+xml" href="./icons/favicon.svg" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/favicon.svg" />
 
-  <!-- Stylesheet Hierarchy -->
+  <!-- Stylesheets -->
   <link rel="stylesheet" href="./css/tokens.css" />
   <link rel="stylesheet" href="./css/base.css" />
   <link rel="stylesheet" href="./css/components.css" />
+
+  <!-- Serverless Peer-to-Peer Mesh (PeerJS via CDN) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
 </head>
 <body>
-  <!-- Visually Hidden Screen Reader Live Region -->
+  <!-- Accessibility Live Region for Screen Readers -->
   <div id="a11y-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Top Navigation / Session Modes & Settings Trigger -->
-  <header class="app-header">
-    <nav class="mode-selector" aria-label="Timer Modes">
-      <button 
-        type="button" 
-        class="mode-btn" 
-        data-mode="focus" 
-        aria-pressed="true"
-      >
-        Focus
-      </button>
-      <button 
-        type="button" 
-        class="mode-btn" 
-        data-mode="shortBreak" 
-        aria-pressed="false"
-      >
-        Short Break
-      </button>
-      <button 
-        type="button" 
-        class="mode-btn" 
-        data-mode="longBreak" 
-        aria-pressed="false"
-      >
-        Long Break
-      </button>
-    </nav>
+  <div id="app">
+    <!-- Header & Collaboration Controls -->
+    <header class="app-header">
+      <div class="brand-badge">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        <span>Rally</span>
+      </div>
 
-    <button 
-      type="button" 
-      id="open-settings-btn" 
-      class="icon-btn" 
-      aria-label="Open Settings"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="3"></circle>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      <div class="header-actions">
+        <button type="button" id="room-btn" class="room-btn" aria-label="Manage Shared Room">
+          <span id="room-status-indicator">👥 Solo</span>
+        </button>
+
+        <button type="button" id="open-settings-btn" class="icon-btn" aria-label="Open Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Radial Timer Stage -->
+    <main class="timer-stage" aria-label="Main Timer Display">
+      <svg class="progress-ring" viewBox="0 0 340 340" aria-hidden="true">
+        <circle 
+          class="progress-ring-bg" 
+          cx="170" 
+          cy="170" 
+          r="150" 
+          fill="transparent" 
+          stroke-width="7" 
+        />
+        <circle 
+          id="progress-indicator" 
+          class="progress-ring-indicator" 
+          cx="170" 
+          cy="170" 
+          r="150" 
+          fill="transparent" 
+          stroke-width="7" 
+          stroke-dasharray="942.48" 
+          stroke-dashoffset="0" 
+        />
       </svg>
-    </button>
-  </header>
 
-  <!-- Main Countdown Stage with Radial SVG Ring -->
-  <main class="timer-container">
-    <svg class="progress-ring" viewBox="0 0 360 360" aria-hidden="true">
-      <circle 
-        class="progress-ring-bg" 
-        cx="180" 
-        cy="180" 
-        r="160" 
-        fill="transparent" 
-        stroke-width="8" 
-      />
-      <circle 
-        id="progress-indicator" 
-        class="progress-ring-indicator" 
-        cx="180" 
-        cy="180" 
-        r="160" 
-        fill="transparent" 
-        stroke-width="8" 
-        stroke-dasharray="1005.3" 
-        stroke-dashoffset="0" 
-      />
-    </svg>
+      <div class="timer-readout">
+        <time id="timer-display" class="timer-digits numeric-tabular">25:00</time>
+        <span id="session-mode-badge" class="mode-pill">Sprint</span>
+      </div>
+    </main>
 
-    <div class="timer-content">
-      <time id="timer-display" class="timer-display numeric-tabular">25:00</time>
-      <span id="session-mode-label" class="session-label">Deep Focus</span>
-    </div>
-  </main>
-
-  <!-- Interaction Bar & Cycle Tracker -->
-  <footer class="controls-container">
-    <div class="action-bar">
-      <button 
-        type="button" 
-        id="reset-btn" 
-        class="btn-ghost" 
-        aria-label="Reset Session"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <!-- Primary Timer Controls -->
+    <section class="controls-bar" aria-label="Timer Controls">
+      <button type="button" id="reset-btn" class="btn-ghost" aria-label="Reset Timer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
           <path d="M3 3v5h5"></path>
         </svg>
       </button>
 
-      <button 
-        type="button" 
-        id="primary-toggle-btn" 
-        class="btn-primary" 
-        aria-label="Start Focus Session"
-      >
+      <button type="button" id="primary-toggle-btn" class="btn-primary" aria-label="Start Timer">
         Start
       </button>
 
-      <button 
-        type="button" 
-        id="skip-btn" 
-        class="btn-ghost" 
-        aria-label="Skip to Next Session"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button type="button" id="skip-btn" class="btn-ghost" aria-label="Skip to Next Round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polygon points="5 4 15 12 5 20 5 4"></polygon>
           <line x1="19" y1="5" x2="19" y2="19"></line>
         </svg>
       </button>
-    </div>
+    </section>
 
-    <!-- Sequence/Cycle Dot Indicators (4 intervals per full loop) -->
-    <div id="cycle-dots" class="cycle-tracker" aria-label="Cycle Progress">
-      <span class="cycle-dot" data-active="false"></span>
-      <span class="cycle-dot" data-active="false"></span>
-      <span class="cycle-dot" data-active="false"></span>
-      <span class="cycle-dot" data-active="false"></span>
-    </div>
-  </footer>
+    <!-- Current Quest & Stepping Stones (Goal Anchor Card) -->
+    <section class="quest-card" aria-label="Current Quest and Stepping Stones">
+      <div class="quest-header">
+        <input 
+          type="text" 
+          id="quest-title-input" 
+          class="quest-title-input" 
+          placeholder="What is your Current Quest?" 
+          aria-label="Current Quest Title"
+          maxlength="80"
+        />
+        <span id="stones-counter" class="stones-counter">0 / 0</span>
+      </div>
 
-  <!-- Settings Dialog (Native HTML5 Accessible Modal) -->
+      <ul id="stepping-stones-list" class="stepping-stones-list" aria-label="Stepping Stones List">
+        <!-- Rendered dynamically via js/ui.js -->
+      </ul>
+
+      <form id="add-stone-form" class="add-stone-form">
+        <input 
+          type="text" 
+          id="new-stone-input" 
+          class="add-stone-input" 
+          placeholder="+ Add a Stepping Stone..." 
+          aria-label="New Stepping Stone"
+          maxlength="80"
+          required
+        />
+        <button type="submit" class="add-stone-btn">Add</button>
+      </form>
+    </section>
+
+    <!-- Multi-Peer Presence Grid (Body Doubling Room Roster) -->
+    <section id="peer-section" class="peer-section" style="display: none;">
+      <h2 class="peer-section-title">Room Squad</h2>
+      <div id="peer-grid" class="peer-grid">
+        <!-- Dynamic remote peer cards rendered via js/ui.js -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Settings Dialog (<dialog>) -->
   <dialog id="settings-dialog" class="modal-dialog">
     <header class="modal-header">
       <h2 class="modal-title">Preferences</h2>
-      <button 
-        type="button" 
-        id="close-settings-btn" 
-        class="icon-btn" 
-        aria-label="Close Settings"
-      >
+      <button type="button" id="close-settings-btn" class="icon-btn" aria-label="Close Settings">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -165,72 +161,67 @@
 
     <form id="settings-form" method="dialog">
       <div class="form-row">
-        <label for="focus-duration" class="form-label">Focus Duration (mins)</label>
-        <input 
-          type="number" 
-          id="focus-duration" 
-          class="form-input" 
-          min="1" 
-          max="120" 
-          value="25" 
-          required 
-        />
+        <label for="display-name-input" class="form-label">Your Nickname</label>
+        <input type="text" id="display-name-input" class="form-input" style="width: 130px; text-align: left;" maxlength="20" required />
       </div>
 
       <div class="form-row">
-        <label for="short-break-duration" class="form-label">Short Break (mins)</label>
-        <input 
-          type="number" 
-          id="short-break-duration" 
-          class="form-input" 
-          min="1" 
-          max="60" 
-          value="5" 
-          required 
-        />
+        <label for="sprint-duration" class="form-label">Sprint / Focus (mins)</label>
+        <input type="number" id="sprint-duration" class="form-input" min="1" max="180" value="25" required />
       </div>
 
       <div class="form-row">
-        <label for="long-break-duration" class="form-label">Long Break (mins)</label>
-        <input 
-          type="number" 
-          id="long-break-duration" 
-          class="form-input" 
-          min="1" 
-          max="60" 
-          value="15" 
-          required 
-        />
+        <label for="rest-duration" class="form-label">Rest / Reset (mins)</label>
+        <input type="number" id="rest-duration" class="form-input" min="1" max="60" value="5" required />
       </div>
 
       <div class="form-row">
-        <label for="auto-start-toggle" class="form-label">Auto-start Breaks</label>
-        <input 
-          type="checkbox" 
-          id="auto-start-toggle" 
-          class="switch-input" 
-        />
+        <label for="timer-direction-select" class="form-label">Timer Style</label>
+        <select id="timer-direction-select" class="form-input" style="width: 140px; text-align: left;">
+          <option value="countdown">Countdown</option>
+          <option value="countup">Flow / Count-up</option>
+        </select>
       </div>
 
       <div class="form-row">
         <label for="sound-toggle" class="form-label">Sound Notifications</label>
-        <input 
-          type="checkbox" 
-          id="sound-toggle" 
-          class="switch-input" 
-          checked 
-        />
+        <input type="checkbox" id="sound-toggle" class="switch-input" checked />
       </div>
 
       <footer class="modal-footer">
-        <button type="submit" class="btn-primary" style="height: 44px; min-width: 100px;">
-          Save
-        </button>
+        <button type="submit" class="btn-primary" style="height: 42px; min-width: 100px;">Save</button>
       </footer>
     </form>
   </dialog>
 
-  <!-- Application Orchestration Scripts -->
+  <!-- Room & Collaboration Dialog (<dialog>) -->
+  <dialog id="room-dialog" class="modal-dialog">
+    <header class="modal-header">
+      <h2 class="modal-title">Body Double Squad</h2>
+      <button type="button" id="close-room-btn" class="icon-btn" aria-label="Close Room Modal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </header>
+
+    <div class="form-row">
+      <label for="sync-mode-toggle" class="form-label">Sync Our Timers Together</label>
+      <input type="checkbox" id="sync-mode-toggle" class="switch-input" />
+    </div>
+
+    <div class="room-invite-box">
+      <input type="text" id="share-link-input" class="form-input form-input-full" readonly />
+      <button type="button" id="copy-link-btn" class="btn-primary" style="height: 38px; min-width: 80px; font-size: var(--text-xs);">Copy</button>
+    </div>
+
+    <footer class="modal-footer">
+      <button type="button" id="leave-room-btn" class="btn-ghost" style="color: var(--color-danger); width: auto; padding: 0 var(--space-sm); font-size: var(--text-xs);">Leave Room</button>
+    </footer>
+  </dialog>
+
+  <!-- Core App Modules -->
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
