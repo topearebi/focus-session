@@ -1,9 +1,9 @@
 /**
  * Rally - Reactive State Store & Persistence
- * Manages second-precision intervals, rounds hierarchy, Quests, and peer presence.
+ * Supports sound profiles, second-precision intervals, task cloning, and peer presence.
  */
 
-const STORAGE_KEY = 'rally_state_v3';
+const STORAGE_KEY = 'rally_state_v4';
 
 const DEFAULT_STATE = {
   profile: {
@@ -11,15 +11,16 @@ const DEFAULT_STATE = {
     avatarColor: '#38bdf8',
   },
   config: {
-    sprintDurationSeconds: 25 * 60, // 1500 seconds (25m)
-    shortRestDurationSeconds: 5 * 60, // 300 seconds (5m)
-    longRestDurationSeconds: 15 * 60, // 900 seconds (15m)
+    sprintDurationSeconds: 25 * 60, // 1500s (25m)
+    shortRestDurationSeconds: 5 * 60, // 300s (5m)
+    longRestDurationSeconds: 15 * 60, // 900s (15m)
     roundsBeforeLongRest: 4,
-    totalRounds: 4, // 0 = infinite continuous rounds
+    totalRounds: 4, // 0 = infinite continuous
     autoStartBreaks: true,
     autoStartSprints: false,
     timerDirection: 'countdown', // 'countdown' | 'countup'
     soundEnabled: true,
+    soundProfile: 'warm', // 'warm' | 'crisp' | 'minimal'
   },
   session: {
     mode: 'sprint', // 'sprint' | 'shortRest' | 'longRest'
@@ -51,9 +52,6 @@ class StateStore {
     this.state = this.loadState();
   }
 
-  /**
-   * Loads state from localStorage and restores active timestamps if reloaded mid-session
-   */
   loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -65,10 +63,9 @@ class StateStore {
         config: { ...DEFAULT_STATE.config, ...parsed.config },
         session: { ...DEFAULT_STATE.session, ...parsed.session },
         quest: { ...DEFAULT_STATE.quest, ...parsed.quest },
-        room: structuredClone(DEFAULT_STATE.room), // Room peers are ephemeral
+        room: structuredClone(DEFAULT_STATE.room),
       };
 
-      // Reconcile remaining time if it was running when reloaded
       if (state.session.status === 'running' && state.session.targetTimestamp) {
         if (state.config.timerDirection === 'countdown') {
           const remaining = state.session.targetTimestamp - Date.now();
@@ -134,7 +131,6 @@ class StateStore {
   updateConfig(partialConfig) {
     this.state.config = { ...this.state.config, ...partialConfig };
 
-    // If currently idle, immediately update session duration to reflect configuration
     if (this.state.session.status === 'idle') {
       const ms = this.getDurationForMode(this.state.session.mode);
       this.state.session.totalDurationMs = ms;
@@ -185,6 +181,26 @@ class StateStore {
     this.notify();
   }
 
+  /**
+   * Clones a peer's process into the local user's checklist
+   */
+  importSteppingStones(stones, newQuestTitle = null) {
+    if (!Array.isArray(stones) || stones.length === 0) return;
+
+    if (newQuestTitle && !this.state.quest.title) {
+      this.state.quest.title = newQuestTitle;
+    }
+
+    const imported = stones.map((s, index) => ({
+      id: `stone-import-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 5)}`,
+      text: s.text,
+      completed: false, // Fresh personal progress
+    }));
+
+    this.state.quest.stones = imported;
+    this.notify();
+  }
+
   /* ================= Timer Session & Rounds Engine ================= */
   setMode(mode, roundOverride = null) {
     if (!['sprint', 'shortRest', 'longRest'].includes(mode)) return;
@@ -228,11 +244,6 @@ class StateStore {
     this.setMode('sprint', 1);
   }
 
-  /**
-   * Advances through the sequence:
-   * Sprint -> Short Rest (or Long Rest if interval reached) -> Sprint (next round)
-   * @returns {Object} { nextMode, nextRound, shouldAutoStart }
-   */
   advanceSession() {
     const current = this.state.session.mode;
     const round = this.state.session.currentRound;
