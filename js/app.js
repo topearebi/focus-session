@@ -51,7 +51,7 @@ class Application {
     const previousMode = previousState.session.mode;
 
     // Advance session and calculate next phase and round
-    const { nextMode, nextRound, shouldAutoStart } = store.advanceSession();
+    const { nextMode, shouldAutoStart } = store.advanceSession();
     const state = store.getState();
 
     // Trigger distinct acoustic cues based on the destination phase
@@ -102,7 +102,26 @@ class Application {
    * Binds interactive DOM buttons, inputs, and modal controls
    */
   bindDOMEvents() {
-    // Primary Start / Pause button
+    // 1. In-place Quick Nickname Editor (Header)
+    const inlineNameInput = document.getElementById('inline-name-input');
+    if (inlineNameInput) {
+      const commitName = () => {
+        const val = inlineNameInput.value.trim();
+        if (val) {
+          store.updateProfile(val);
+          peerSync.broadcast();
+        }
+      };
+      inlineNameInput.addEventListener('change', commitName);
+      inlineNameInput.addEventListener('blur', commitName);
+      inlineNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          inlineNameInput.blur();
+        }
+      });
+    }
+
+    // 2. Primary Start / Pause button
     const toggleBtn = document.getElementById('primary-toggle-btn');
     toggleBtn.addEventListener('click', () => {
       sound.playTactileClick();
@@ -115,7 +134,7 @@ class Application {
       peerSync.broadcast();
     });
 
-    // Reset button
+    // 3. Reset button
     const resetBtn = document.getElementById('reset-btn');
     resetBtn.addEventListener('click', () => {
       sound.playTactileClick();
@@ -123,21 +142,32 @@ class Application {
       peerSync.broadcast();
     });
 
-    // Skip button
+    // 4. Skip button
     const skipBtn = document.getElementById('skip-btn');
     skipBtn.addEventListener('click', () => {
       sound.playTactileClick();
       this.handleSessionCompletion();
     });
 
-    // Quest Title input
+    // 5. Contextual Live Sync Banner (Main screen)
+    const toggleSyncBtn = document.getElementById('toggle-sync-btn');
+    if (toggleSyncBtn) {
+      toggleSyncBtn.addEventListener('click', () => {
+        sound.playTactileClick();
+        const current = store.getState().room.syncTimers;
+        store.setSyncTimers(!current);
+        peerSync.broadcast();
+      });
+    }
+
+    // 6. Current Quest Title input
     const questInput = document.getElementById('quest-title-input');
     questInput.addEventListener('input', (e) => {
       store.setQuestTitle(e.target.value);
       peerSync.broadcast();
     });
 
-    // Add Stepping Stone Form
+    // 7. Add Stepping Stone Form
     const addStoneForm = document.getElementById('add-stone-form');
     const newStoneInput = document.getElementById('new-stone-input');
     addStoneForm.addEventListener('submit', (e) => {
@@ -151,7 +181,7 @@ class Application {
       }
     });
 
-    // Settings Modal Open/Close triggers
+    // 8. Settings Modal Open / Close triggers
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const settingsForm = document.getElementById('settings-form');
@@ -166,13 +196,11 @@ class Application {
       ui.closeSettings();
     });
 
-    // Settings Form Submission
+    // 9. Settings Form Submission (Second precision calculation)
     settingsForm.addEventListener('submit', (e) => {
       e.preventDefault();
       e.stopPropagation();
       sound.playTactileClick();
-
-      const displayName = document.getElementById('display-name-input').value.trim();
 
       // Compute total seconds for sprint
       const sprintM = parseFloat(document.getElementById('sprint-min').value) || 0;
@@ -196,7 +224,6 @@ class Application {
       const direction = document.getElementById('timer-direction-select').value;
       const soundEnabled = document.getElementById('sound-toggle').checked;
 
-      store.updateProfile(displayName);
       store.updateConfig({
         sprintDurationSeconds: totalSprintSec,
         shortRestDurationSeconds: totalShortSec,
@@ -213,12 +240,14 @@ class Application {
       peerSync.broadcast();
     });
 
-    // Squad Room Modal & Sharing
+    // 10. Squad Room Modal & Sharing
     const roomBtn = document.getElementById('room-btn');
     const closeRoomBtn = document.getElementById('close-room-btn');
     const copyLinkBtn = document.getElementById('copy-link-btn');
     const leaveRoomBtn = document.getElementById('leave-room-btn');
-    const syncModeToggle = document.getElementById('sync-mode-toggle');
+    const retryConnectionBtn = document.getElementById('retry-connection-btn');
+    const joinRoomForm = document.getElementById('join-room-form');
+    const joinCodeInput = document.getElementById('join-code-input');
 
     roomBtn.addEventListener('click', async () => {
       sound.playTactileClick();
@@ -234,6 +263,33 @@ class Application {
       ui.closeRoom();
     });
 
+    // Direct Join via Room Code Form
+    if (joinRoomForm && joinCodeInput) {
+      joinRoomForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        sound.playTactileClick();
+        const code = joinCodeInput.value.trim();
+        if (code) {
+          try {
+            await peerSync.joinByCode(code);
+            joinCodeInput.value = '';
+            ui.closeRoom();
+          } catch (err) {
+            alert(`Unable to join room: ${err.message}`);
+          }
+        }
+      });
+    }
+
+    // Manual Reconnection Action
+    if (retryConnectionBtn) {
+      retryConnectionBtn.addEventListener('click', async () => {
+        sound.playTactileClick();
+        await peerSync.reconnect();
+      });
+    }
+
+    // Share link copy action
     copyLinkBtn.addEventListener('click', async () => {
       sound.playTactileClick();
       const shareInput = document.getElementById('share-link-input');
@@ -249,15 +305,11 @@ class Application {
       }
     });
 
+    // Leave room action
     leaveRoomBtn.addEventListener('click', () => {
       sound.playTactileClick();
       peerSync.leaveRoom();
       ui.closeRoom();
-    });
-
-    syncModeToggle.addEventListener('change', (e) => {
-      store.setSyncTimers(e.target.checked);
-      peerSync.broadcast();
     });
   }
 
@@ -278,7 +330,7 @@ class Application {
   }
 
   /**
-   * Global keyboard navigation & shortcuts
+   * Global keyboard shortcuts
    */
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
