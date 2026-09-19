@@ -1,6 +1,6 @@
 /**
  * Rally - UI Controller & DOM Orchestrator
- * Updates radial progress, renders Quest checklists, updates peer squad cards, and synchronizes modals.
+ * Renders rounds HUD, cycle indicators, three-phase timer dials, and squad state.
  */
 
 import { dynamicFavicon } from './favicon.js';
@@ -14,7 +14,9 @@ class UIController {
     this.roomBtn = document.getElementById('room-btn');
     this.roomStatusIndicator = document.getElementById('room-status-indicator');
 
-    // Timer elements
+    // Timer & Round HUD elements
+    this.roundHudBadge = document.getElementById('round-hud-badge');
+    this.cycleDotsContainer = document.getElementById('cycle-dots-container');
     this.timerDisplay = document.getElementById('timer-display');
     this.sessionModeBadge = document.getElementById('session-mode-badge');
     this.progressIndicator = document.getElementById('progress-indicator');
@@ -34,12 +36,18 @@ class UIController {
     this.settingsDialog = document.getElementById('settings-dialog');
     this.displayNameInput = document.getElementById('display-name-input');
     this.sprintDurationInput = document.getElementById('sprint-duration');
-    this.restDurationInput = document.getElementById('rest-duration');
+    this.shortRestDurationInput = document.getElementById('short-rest-duration');
+    this.longRestDurationInput = document.getElementById('long-rest-duration');
+    this.roundsBeforeLongInput = document.getElementById('rounds-before-long');
+    this.totalRoundsInput = document.getElementById('total-rounds');
+    this.autoStartBreaksToggle = document.getElementById('auto-start-breaks');
+    this.autoStartSprintsToggle = document.getElementById('auto-start-sprints');
     this.timerDirectionSelect = document.getElementById('timer-direction-select');
     this.soundToggle = document.getElementById('sound-toggle');
 
     // Room Modal elements
     this.roomDialog = document.getElementById('room-dialog');
+    this.roomModalStatus = document.getElementById('room-modal-status');
     this.syncModeToggle = document.getElementById('sync-mode-toggle');
     this.shareLinkInput = document.getElementById('share-link-input');
 
@@ -48,9 +56,6 @@ class UIController {
     this.lastAnnouncedMinute = null;
   }
 
-  /**
-   * Formats milliseconds into zero-padded mm:ss representation
-   */
   formatTime(ms) {
     const totalSeconds = Math.ceil(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -60,8 +65,10 @@ class UIController {
 
   getModeLabel(mode) {
     switch (mode) {
-      case 'rest':
-        return 'Rest / Reset';
+      case 'shortRest':
+        return 'Short Rest';
+      case 'longRest':
+        return 'Long Rest';
       case 'sprint':
       default:
         return 'Sprint';
@@ -74,22 +81,23 @@ class UIController {
     }
   }
 
-  /**
-   * Main render method invoked on any state change
-   */
   render(state) {
     const { session, config, quest, room, profile } = state;
-    const { mode, status, remainingMs, totalDurationMs } = session;
+    const { mode, status, remainingMs, totalDurationMs, currentRound } = session;
 
-    // 1. Update theme and mode pill
+    // 1. Theme and mode badge
     this.html.setAttribute('data-theme-mode', mode);
     this.sessionModeBadge.textContent = this.getModeLabel(mode);
 
-    // 2. Render countdown / count-up readout
+    // 2. Round HUD and Cycle Dots
+    const totalRoundsText = config.totalRounds > 0 ? ` of ${config.totalRounds}` : '';
+    this.roundHudBadge.textContent = `Round ${currentRound}${totalRoundsText}`;
+    this.renderCycleDots(currentRound, config.roundsBeforeLongRest);
+
+    // 3. Digits & Toggle Button
     const timeFormatted = this.formatTime(remainingMs);
     this.timerDisplay.textContent = timeFormatted;
 
-    // 3. Update primary toggle button state
     const isRunning = status === 'running';
     this.primaryToggleBtn.textContent = isRunning ? 'Pause' : 'Start';
     this.primaryToggleBtn.setAttribute(
@@ -97,7 +105,7 @@ class UIController {
       isRunning ? `Pause ${this.getModeLabel(mode)}` : `Start ${this.getModeLabel(mode)}`
     );
 
-    // 4. Update SVG radial dial indicator
+    // 4. Progress Dial Offset
     const elapsedRatio = totalDurationMs > 0 ? (totalDurationMs - remainingMs) / totalDurationMs : 0;
     const normalizedRatio = config.timerDirection === 'countup' 
       ? 1 
@@ -105,37 +113,53 @@ class UIController {
     const offset = this.circumference * (1 - normalizedRatio);
     this.progressIndicator.style.strokeDashoffset = `${offset}px`;
 
-    // 5. Update browser title and dynamic favicon
+    // 5. Browser Title & Favicon
     document.title = `${timeFormatted} • Rally`;
     dynamicFavicon.update(normalizedRatio, mode);
 
-    // 6. Update Current Quest and Stepping Stones
+    // 6. Current Quest & Stepping Stones
     if (document.activeElement !== this.questTitleInput) {
       this.questTitleInput.value = quest.title;
     }
     this.renderSteppingStones(quest.stones);
 
-    // 7. Update Room Status & Peers
+    // 7. Room Network Indicator & Peers
     this.renderRoomStatus(room);
     this.renderPeerGrid(room.peers);
 
-    // 8. Hydrate Dialog Inputs
+    // 8. Hydrate Settings Modal Inputs
     if (document.activeElement !== this.displayNameInput) {
       this.displayNameInput.value = profile.displayName;
     }
     this.sprintDurationInput.value = config.sprintDurationMinutes;
-    this.restDurationInput.value = config.restDurationMinutes;
+    this.shortRestDurationInput.value = config.shortRestDurationMinutes;
+    this.longRestDurationInput.value = config.longRestDurationMinutes;
+    this.roundsBeforeLongInput.value = config.roundsBeforeLongRest;
+    this.totalRoundsInput.value = config.totalRounds;
+    this.autoStartBreaksToggle.checked = config.autoStartBreaks;
+    this.autoStartSprintsToggle.checked = config.autoStartSprints;
     this.timerDirectionSelect.value = config.timerDirection;
     this.soundToggle.checked = config.soundEnabled;
     this.syncModeToggle.checked = room.syncTimers;
 
     // 9. Accessibility Milestones
-    this.evaluateA11yMilestones(remainingMs, totalDurationMs, status, mode);
+    this.evaluateA11yMilestones(remainingMs, status);
   }
 
-  /**
-   * Renders the stepping stones checklist
-   */
+  renderCycleDots(currentRound, cycleLength) {
+    this.cycleDotsContainer.innerHTML = '';
+    const activeDotIndex = ((currentRound - 1) % cycleLength) + 1;
+
+    for (let i = 1; i <= cycleLength; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'cycle-dot';
+      if (i === activeDotIndex) {
+        dot.setAttribute('data-active', 'true');
+      }
+      this.cycleDotsContainer.appendChild(dot);
+    }
+  }
+
   renderSteppingStones(stones) {
     const completedCount = stones.filter((s) => s.completed).length;
     this.stonesCounter.textContent = `${completedCount} / ${stones.length}`;
@@ -172,25 +196,32 @@ class UIController {
     });
   }
 
-  /**
-   * Updates the top bar room connection indicator
-   */
   renderRoomStatus(room) {
-    if (room.roomId) {
-      const peerCount = Object.keys(room.peers).length + 1;
-      this.roomBtn.setAttribute('data-connected', 'true');
-      this.roomStatusIndicator.textContent = `👥 ${peerCount} in Room`;
-      this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${room.roomId}`;
-    } else {
-      this.roomBtn.setAttribute('data-connected', 'false');
+    const { roomId, connectionStatus, peers } = room;
+    const peerCount = Object.keys(peers).length + 1;
+
+    this.roomBtn.setAttribute('data-status', connectionStatus);
+
+    if (!roomId) {
       this.roomStatusIndicator.textContent = '👥 Solo';
+      this.roomModalStatus.textContent = 'Solo (No active room)';
       this.shareLinkInput.value = '';
+      return;
+    }
+
+    if (connectionStatus === 'connecting') {
+      this.roomStatusIndicator.textContent = '🟡 Connecting...';
+      this.roomModalStatus.textContent = 'Connecting to squad mesh...';
+    } else if (connectionStatus === 'connected') {
+      this.roomStatusIndicator.textContent = `🟢 ${peerCount} in Squad`;
+      this.roomModalStatus.textContent = `Connected (${peerCount} active)`;
+      this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${roomId}`;
+    } else {
+      this.roomStatusIndicator.textContent = '🔴 Offline';
+      this.roomModalStatus.textContent = 'Disconnected. Check your network connection.';
     }
   }
 
-  /**
-   * Renders the Body Doubling squad cards
-   */
   renderPeerGrid(peers) {
     const peerEntries = Object.entries(peers);
 
@@ -203,7 +234,7 @@ class UIController {
     this.peerSection.style.display = 'flex';
     this.peerGrid.innerHTML = '';
 
-    peerEntries.forEach(([peerId, data]) => {
+    peerEntries.forEach(([_, data]) => {
       const card = document.createElement('article');
       card.className = 'peer-card';
       card.style.setProperty('--peer-accent', data.avatarColor || '#38bdf8');
@@ -228,7 +259,7 @@ class UIController {
     });
   }
 
-  evaluateA11yMilestones(remainingMs, totalMs, status, mode) {
+  evaluateA11yMilestones(remainingMs, status) {
     if (status !== 'running') {
       this.lastAnnouncedMinute = null;
       return;
