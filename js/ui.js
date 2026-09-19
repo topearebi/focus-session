@@ -35,9 +35,12 @@ class UIController {
     // Settings Modal elements
     this.settingsDialog = document.getElementById('settings-dialog');
     this.displayNameInput = document.getElementById('display-name-input');
-    this.sprintDurationInput = document.getElementById('sprint-duration');
-    this.shortRestDurationInput = document.getElementById('short-rest-duration');
-    this.longRestDurationInput = document.getElementById('long-rest-duration');
+    this.sprintMinInput = document.getElementById('sprint-min');
+    this.sprintSecInput = document.getElementById('sprint-sec');
+    this.shortRestMinInput = document.getElementById('short-rest-min');
+    this.shortRestSecInput = document.getElementById('short-rest-sec');
+    this.longRestMinInput = document.getElementById('long-rest-min');
+    this.longRestSecInput = document.getElementById('long-rest-sec');
     this.roundsBeforeLongInput = document.getElementById('rounds-before-long');
     this.totalRoundsInput = document.getElementById('total-rounds');
     this.autoStartBreaksToggle = document.getElementById('auto-start-breaks');
@@ -127,30 +130,48 @@ class UIController {
     this.renderRoomStatus(room);
     this.renderPeerGrid(room.peers);
 
-    // 8. Hydrate Settings Modal Inputs
-    if (document.activeElement !== this.displayNameInput) {
-      this.displayNameInput.value = profile.displayName;
+    // 8. Hydrate Settings Modal Inputs without overriding active typing
+    const activeEl = document.activeElement;
+    const isEditingSettings = this.settingsDialog && this.settingsDialog.open && this.settingsDialog.contains(activeEl);
+
+    if (!isEditingSettings) {
+      if (this.displayNameInput) this.displayNameInput.value = profile.displayName;
+
+      const sSec = config.sprintDurationSeconds || 1500;
+      if (this.sprintMinInput) this.sprintMinInput.value = Math.floor(sSec / 60);
+      if (this.sprintSecInput) this.sprintSecInput.value = sSec % 60;
+
+      const srSec = config.shortRestDurationSeconds || 300;
+      if (this.shortRestMinInput) this.shortRestMinInput.value = Math.floor(srSec / 60);
+      if (this.shortRestSecInput) this.shortRestSecInput.value = srSec % 60;
+
+      const lrSec = config.longRestDurationSeconds || 900;
+      if (this.longRestMinInput) this.longRestMinInput.value = Math.floor(lrSec / 60);
+      if (this.longRestSecInput) this.longRestSecInput.value = lrSec % 60;
+
+      if (this.roundsBeforeLongInput) this.roundsBeforeLongInput.value = config.roundsBeforeLongRest;
+      if (this.totalRoundsInput) this.totalRoundsInput.value = config.totalRounds;
+      if (this.autoStartBreaksToggle) this.autoStartBreaksToggle.checked = config.autoStartBreaks;
+      if (this.autoStartSprintsToggle) this.autoStartSprintsToggle.checked = config.autoStartSprints;
+      if (this.timerDirectionSelect) this.timerDirectionSelect.value = config.timerDirection;
+      if (this.soundToggle) this.soundToggle.checked = config.soundEnabled;
     }
-    this.sprintDurationInput.value = config.sprintDurationMinutes;
-    this.shortRestDurationInput.value = config.shortRestDurationMinutes;
-    this.longRestDurationInput.value = config.longRestDurationMinutes;
-    this.roundsBeforeLongInput.value = config.roundsBeforeLongRest;
-    this.totalRoundsInput.value = config.totalRounds;
-    this.autoStartBreaksToggle.checked = config.autoStartBreaks;
-    this.autoStartSprintsToggle.checked = config.autoStartSprints;
-    this.timerDirectionSelect.value = config.timerDirection;
-    this.soundToggle.checked = config.soundEnabled;
-    this.syncModeToggle.checked = room.syncTimers;
+
+    if (this.syncModeToggle) this.syncModeToggle.checked = room.syncTimers;
 
     // 9. Accessibility Milestones
     this.evaluateA11yMilestones(remainingMs, status);
   }
 
   renderCycleDots(currentRound, cycleLength) {
+    if (!this.cycleDotsContainer) return;
     this.cycleDotsContainer.innerHTML = '';
-    const activeDotIndex = ((currentRound - 1) % cycleLength) + 1;
+    
+    // Cycle wraps based on roundsBeforeLongRest
+    const safeCycle = Math.max(1, cycleLength || 4);
+    const activeDotIndex = ((currentRound - 1) % safeCycle) + 1;
 
-    for (let i = 1; i <= cycleLength; i++) {
+    for (let i = 1; i <= safeCycle; i++) {
       const dot = document.createElement('span');
       dot.className = 'cycle-dot';
       if (i === activeDotIndex) {
@@ -161,6 +182,8 @@ class UIController {
   }
 
   renderSteppingStones(stones) {
+    if (!this.steppingStonesList || !this.stonesCounter) return;
+
     const completedCount = stones.filter((s) => s.completed).length;
     this.stonesCounter.textContent = `${completedCount} / ${stones.length}`;
 
@@ -200,29 +223,34 @@ class UIController {
     const { roomId, connectionStatus, peers } = room;
     const peerCount = Object.keys(peers).length + 1;
 
-    this.roomBtn.setAttribute('data-status', connectionStatus);
+    if (this.roomBtn) {
+      this.roomBtn.setAttribute('data-status', connectionStatus);
+    }
 
     if (!roomId) {
-      this.roomStatusIndicator.textContent = '👥 Solo';
-      this.roomModalStatus.textContent = 'Solo (No active room)';
-      this.shareLinkInput.value = '';
+      if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '👥 Solo';
+      if (this.roomModalStatus) this.roomModalStatus.textContent = 'Solo (No active room)';
+      if (this.shareLinkInput) this.shareLinkInput.value = '';
       return;
     }
 
     if (connectionStatus === 'connecting') {
-      this.roomStatusIndicator.textContent = '🟡 Connecting...';
-      this.roomModalStatus.textContent = 'Connecting to squad mesh...';
+      if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '🟡 Connecting...';
+      if (this.roomModalStatus) this.roomModalStatus.textContent = 'Connecting to squad mesh...';
     } else if (connectionStatus === 'connected') {
-      this.roomStatusIndicator.textContent = `🟢 ${peerCount} in Squad`;
-      this.roomModalStatus.textContent = `Connected (${peerCount} active)`;
-      this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${roomId}`;
+      if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = `🟢 ${peerCount} in Squad`;
+      if (this.roomModalStatus) this.roomModalStatus.textContent = `Connected (${peerCount} active)`;
+      if (this.shareLinkInput) {
+        this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${roomId}`;
+      }
     } else {
-      this.roomStatusIndicator.textContent = '🔴 Offline';
-      this.roomModalStatus.textContent = 'Disconnected. Check your network connection.';
+      if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '🔴 Offline';
+      if (this.roomModalStatus) this.roomModalStatus.textContent = 'Disconnected. Check your network connection.';
     }
   }
 
   renderPeerGrid(peers) {
+    if (!this.peerSection || !this.peerGrid) return;
     const peerEntries = Object.entries(peers);
 
     if (peerEntries.length === 0) {
