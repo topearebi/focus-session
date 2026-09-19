@@ -1,63 +1,43 @@
 /**
- * Rally - Timing Web Worker
- * Runs countdown and count-up loops on a background thread immune to main-thread throttling.
+ * Rally - Precision Background Worker
+ * Dedicated off-thread timer loop managing countdown and capped count-up sessions.
  */
 
-let timerInterval = null;
-let anchorTimestamp = 0;
-let direction = 'countdown';
+let timerId = null;
 
 self.onmessage = (event) => {
-  const { command, remainingMs, targetTime, timerDirection } = event.data;
+  const { command, remainingMs, targetTime, timerDirection, totalDurationMs } = event.data;
 
-  switch (command) {
-    case 'START':
-      direction = timerDirection || 'countdown';
-      clearInterval(timerInterval);
+  if (command === 'START') {
+    clearInterval(timerId);
 
-      if (direction === 'countdown') {
-        anchorTimestamp = targetTime || (Date.now() + remainingMs);
+    timerId = setInterval(() => {
+      const now = Date.now();
 
-        timerInterval = setInterval(() => {
-          const now = Date.now();
-          const currentRemaining = Math.max(0, anchorTimestamp - now);
+      if (timerDirection === 'countup') {
+        const elapsed = now - targetTime;
 
-          self.postMessage({
-            type: 'TICK',
-            remainingMs: currentRemaining,
-          });
-
-          if (currentRemaining <= 0) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-            self.postMessage({ type: 'COMPLETE' });
-          }
-        }, 200);
+        if (totalDurationMs && elapsed >= totalDurationMs) {
+          clearInterval(timerId);
+          self.postMessage({ type: 'TICK', remainingMs: totalDurationMs });
+          self.postMessage({ type: 'COMPLETE' });
+        } else {
+          self.postMessage({ type: 'TICK', remainingMs: Math.max(0, elapsed) });
+        }
       } else {
-        // Count-up / Flow mode
-        anchorTimestamp = targetTime || (Date.now() - remainingMs);
+        const remaining = targetTime - now;
 
-        timerInterval = setInterval(() => {
-          const now = Date.now();
-          const elapsed = Math.max(0, now - anchorTimestamp);
-
-          self.postMessage({
-            type: 'TICK',
-            remainingMs: elapsed,
-          });
-        }, 200);
+        if (remaining <= 0) {
+          clearInterval(timerId);
+          self.postMessage({ type: 'TICK', remainingMs: 0 });
+          self.postMessage({ type: 'COMPLETE' });
+        } else {
+          self.postMessage({ type: 'TICK', remainingMs: Math.max(0, remaining) });
+        }
       }
-      break;
-
-    case 'PAUSE':
-    case 'STOP':
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
-      break;
-
-    default:
-      console.warn(`[Worker] Unrecognized command: ${command}`);
+    }, 250);
+  } else if (command === 'PAUSE') {
+    clearInterval(timerId);
+    timerId = null;
   }
 };
