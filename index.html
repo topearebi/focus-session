@@ -97,7 +97,7 @@
 
       <div class="timer-readout">
         <span id="round-hud-badge" class="round-indicator">Round 1 of 4</span>
-        <time id="timer-display" class="timer-digits numeric-tabular">25:00</time>
+        <time id="timer-display" class="timer-digits numeric-tabular" aria-live="off">25:00</time>
         <span id="session-mode-badge" class="mode-pill">Sprint</span>
         <div id="cycle-dots-container" class="cycle-dots" aria-hidden="true">
           <!-- Dynamic round dots rendered by ui.js -->
@@ -273,7 +273,7 @@
         </select>
       </div>
 
-      <!-- Sound Notification & Acoustic Profile -->
+      <!-- Sound Notification & Acoustic Profile with Preview -->
       <div class="form-row">
         <label for="sound-toggle" class="form-label">Sound Notifications</label>
         <input type="checkbox" id="sound-toggle" class="switch-input" checked />
@@ -281,11 +281,16 @@
 
       <div class="form-row">
         <label for="sound-profile-select" class="form-label">Acoustic Theme</label>
-        <select id="sound-profile-select" class="form-input" style="width: 155px; text-align: left;">
-          <option value="warm">Harmonic Warmth</option>
-          <option value="crisp">Crisp / Energetic</option>
-          <option value="minimal">Minimalist / Wooden</option>
-        </select>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <select id="sound-profile-select" class="form-input" style="width: 135px; text-align: left;">
+            <option value="warm">Harmonic Warmth</option>
+            <option value="crisp">Crisp / Action</option>
+            <option value="minimal">Minimalist / Wood</option>
+          </select>
+          <button type="button" id="preview-sound-btn" class="btn-ghost" style="height: 32px; padding: 0 8px; font-size: var(--text-2xs); border-color: var(--surface-border);" title="Audition this sound profile">
+            Test
+          </button>
+        </div>
       </div>
 
       <footer class="modal-footer">
