@@ -1,6 +1,6 @@
 /**
  * Rally - Hardened Serverless Multi-Peer Sync Engine
- * P2P DataChannel mesh with host relay, room code normalization, and manual resync.
+ * P2P DataChannel mesh with process cloning support, keep-alive, and manual resync.
  */
 
 import { store } from './state.js';
@@ -102,7 +102,7 @@ class PeerSyncEngine {
       // 1. Send immediate local state snapshot
       this.sendStateTo(conn);
 
-      // 2. Host coordinates mesh introduction
+      // 2. Host coordinates mesh directory relay
       const { isHost } = store.getState().room;
       if (isHost) {
         this.relayMeshDirectory();
@@ -144,9 +144,6 @@ class PeerSyncEngine {
     }
   }
 
-  /**
-   * Host: Creates a new room
-   */
   async createRoom() {
     store.setConnectionStatus('connecting');
     const roomId = await this.initPeer();
@@ -156,9 +153,6 @@ class PeerSyncEngine {
     return roomId;
   }
 
-  /**
-   * Guest: Joins a room by its normalized ID
-   */
   async joinRoom(targetRoomId) {
     if (this.isConnecting) return;
     this.isConnecting = true;
@@ -183,29 +177,21 @@ class PeerSyncEngine {
     }
   }
 
-  /**
-   * Normalizes human-entered code and joins
-   */
   async joinByCode(rawCode) {
     if (!rawCode || !rawCode.trim()) {
       throw new Error('Please enter a valid room code.');
     }
 
     let code = rawCode.trim().toLowerCase();
-    // Strip hash or prefixes if pasted accidentally
     code = code.replace(/.*#room=/, '').replace(/^rally-/, '');
     const targetRoomId = `rally-${code}`;
     return this.joinRoom(targetRoomId);
   }
 
-  /**
-   * Manual user-initiated reconnect
-   */
   async reconnect() {
     const { roomId, isHost } = store.getState().room;
     store.setConnectionStatus('connecting');
 
-    // Tear down active connections cleanly
     for (const conn of this.connections.values()) {
       try { conn.close(); } catch (_) {}
     }
@@ -291,6 +277,7 @@ class PeerSyncEngine {
         totalStones: state.quest.stones.length,
         completedStones: state.quest.stones.filter((s) => s.completed).length,
         activeStone: activeStone ? activeStone.text : 'All stones completed!',
+        stones: state.quest.stones, // Full stepping stones list for cloning
       },
       timer: {
         mode: state.session.mode,
@@ -339,13 +326,16 @@ class PeerSyncEngine {
     store.updatePeer(senderId, {
       displayName: data.profile?.displayName || 'Teammate',
       avatarColor: data.profile?.avatarColor || '#38bdf8',
-      quest: data.quest,
+      quest: {
+        ...data.quest,
+        stones: Array.isArray(data.quest?.stones) ? data.quest.stones : [],
+      },
       timer: data.timer,
     });
 
     const localState = store.getState();
 
-    // Master timer synchronization when enabled
+    // Host-led timer synchronization
     if (localState.room.syncTimers && !localState.room.isHost && data.roomConfig?.isHost) {
       if (
         localState.session.mode !== data.timer.mode ||
