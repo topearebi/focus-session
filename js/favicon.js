@@ -1,5 +1,5 @@
 /**
- * Focus Session - Dynamic Favicon Renderer
+ * Rally - Dynamic Favicon Renderer
  * Draws real-time progress indicators onto an offscreen canvas and updates the browser tab icon.
  */
 
@@ -14,34 +14,30 @@ class FaviconRenderer {
     this.lastMode = '';
   }
 
-  /**
-   * Mode color map matching tokens.css definitions
-   */
   getColorPalette(mode) {
     switch (mode) {
-      case 'shortBreak':
-        return { accent: '#34d399', bg: '#06231a' };
-      case 'longBreak':
-        return { accent: '#a78bfa', bg: '#0f1123' };
       case 'focus':
+        return { accent: '#38bdf8', bg: '#080d1a' };
+      case 'rest':
+        return { accent: '#34d399', bg: '#061812' };
+      case 'sprint':
       default:
-        return { accent: '#38bdf8', bg: '#0b0f17' };
+        return { accent: '#fbbf24', bg: '#0d0f17' };
     }
   }
 
   /**
-   * Draws a circular progress ring representing the current session
+   * Renders the circular dial progress to the tab icon
    * @param {number} progress - Decimal from 0.0 to 1.0
-   * @param {string} mode - 'focus' | 'shortBreak' | 'longBreak'
+   * @param {string} mode - 'sprint' | 'focus' | 'rest'
    */
   update(progress, mode) {
-    // Prevent unnecessary canvas redraws if delta is negligible
-    const roundedProgress = Math.round(progress * 100) / 100;
-    if (roundedProgress === this.lastProgress && mode === this.lastMode) {
+    const rounded = Math.round(progress * 100) / 100;
+    if (rounded === this.lastProgress && mode === this.lastMode) {
       return;
     }
 
-    this.lastProgress = roundedProgress;
+    this.lastProgress = rounded;
     this.lastMode = mode;
 
     const { ctx, canvas } = this;
@@ -54,7 +50,7 @@ class FaviconRenderer {
     const radius = 24;
     const lineWidth = 7;
 
-    // Outer circular container
+    // Rounded background tile
     ctx.beginPath();
     ctx.arc(centerX, centerY, 28, 0, 2 * Math.PI);
     ctx.fillStyle = bg;
@@ -63,11 +59,11 @@ class FaviconRenderer {
     // Background track ring
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.lineWidth = lineWidth;
     ctx.stroke();
 
-    // Active progress stroke (clockwise from top)
+    // Active progress stroke
     if (progress > 0) {
       const startAngle = -0.5 * Math.PI;
       const endAngle = startAngle + 2 * Math.PI * progress;
@@ -80,15 +76,11 @@ class FaviconRenderer {
       ctx.stroke();
     }
 
-    // Push base64 data to browser tab icon
     if (this.faviconElement) {
       this.faviconElement.href = canvas.toDataURL('image/png');
     }
   }
 
-  /**
-   * Resets favicon to static vector SVG default
-   */
   reset() {
     this.lastProgress = -1;
     this.lastMode = '';
