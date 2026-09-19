@@ -1,6 +1,6 @@
 /**
  * Rally - Application Bootstrap & Orchestrator
- * Connects worker lifecycle, sound profile switching, task list cloning, and P2P mesh.
+ * Connects worker lifecycle, sound profile auditioning, task list cloning, and P2P mesh.
  */
 
 import { store } from './state.js';
@@ -88,6 +88,7 @@ class Application {
             remainingMs: state.session.remainingMs,
             targetTime: state.session.targetTimestamp,
             timerDirection: state.config.timerDirection,
+            totalDurationMs: state.session.totalDurationMs,
           });
           this.requestWakeLock();
         } else {
@@ -204,7 +205,17 @@ class Application {
       });
     }
 
-    // 9. Settings Modal Open / Close triggers
+    // 9. Sound Profile Audition / Preview Button
+    const previewSoundBtn = document.getElementById('preview-sound-btn');
+    const soundProfileSelect = document.getElementById('sound-profile-select');
+    if (previewSoundBtn && soundProfileSelect) {
+      previewSoundBtn.addEventListener('click', () => {
+        const selectedProfile = soundProfileSelect.value || 'warm';
+        sound.previewProfile(selectedProfile);
+      });
+    }
+
+    // 10. Settings Modal Open / Close triggers
     const openSettingsBtn = document.getElementById('open-settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const settingsForm = document.getElementById('settings-form');
@@ -219,7 +230,7 @@ class Application {
       ui.closeSettings();
     });
 
-    // 10. Settings Form Submission (Second precision calculation & sound theme)
+    // 11. Settings Form Submission (Second precision calculation & sound theme)
     settingsForm.addEventListener('submit', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -265,7 +276,7 @@ class Application {
       peerSync.broadcast();
     });
 
-    // 11. Squad Room Modal & Sharing
+    // 12. Squad Room Modal & Sharing
     const roomBtn = document.getElementById('room-btn');
     const closeRoomBtn = document.getElementById('close-room-btn');
     const copyLinkBtn = document.getElementById('copy-link-btn');
