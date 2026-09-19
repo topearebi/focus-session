@@ -1,7 +1,9 @@
 /**
  * Rally - Web Audio Synthesizer
- * Zero-dependency phase-distinct acoustic chimes, fanfares, and alerts.
+ * Zero-dependency acoustic engine supporting Warm, Crisp, and Minimal sound profiles.
  */
+
+import { store } from './state.js';
 
 class SoundEngine {
   constructor() {
@@ -10,7 +12,7 @@ class SoundEngine {
   }
 
   /**
-   * Initializes or resumes the AudioContext on first user interaction
+   * Initializes or resumes AudioContext on user interaction
    */
   initContext() {
     if (!this.ctx) {
@@ -27,37 +29,81 @@ class SoundEngine {
     this.isUnlocked = true;
   }
 
+  getActiveProfile() {
+    return store.getState().config.soundProfile || 'warm';
+  }
+
+  isSoundEnabled() {
+    return store.getState().config.soundEnabled !== false;
+  }
+
   /**
-   * Helper: Plays a scheduled note with smooth exponential attack and decay
+   * Schedules a shaped tone with envelope curves matched to the active profile
    */
-  scheduleTone(freq, start, duration, gainLevel = 0.2, type = 'sine') {
-    if (!this.ctx) return;
+  scheduleTone(freq, start, duration, gainLevel = 0.2, typeOverride = null) {
+    if (!this.ctx || !this.isSoundEnabled()) return;
+
+    const profile = this.getActiveProfile();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
-    osc.type = type;
+    let oscType = typeOverride || 'sine';
+    let attackTime = 0.025;
+    let actualGain = gainLevel;
+
+    if (profile === 'crisp') {
+      oscType = typeOverride || 'triangle';
+      attackTime = 0.008; // Snappier, bright attack
+      actualGain = gainLevel * 1.1;
+    } else if (profile === 'minimal') {
+      oscType = 'triangle';
+      attackTime = 0.004; // Percussive woodblock strike
+      actualGain = gainLevel * 0.85;
+    }
+
+    osc.type = oscType;
     osc.frequency.setValueAtTime(freq, start);
 
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(gainLevel, start + 0.025);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    gain.gain.exponentialRampToValueAtTime(actualGain, start + attackTime);
+
+    // Fast decay for minimal profile to avoid lingering ringing
+    const decayDuration = profile === 'minimal' ? Math.min(duration, 0.12) : duration;
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + decayDuration);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
 
     osc.start(start);
-    osc.stop(start + duration + 0.05);
+    osc.stop(start + decayDuration + 0.04);
   }
 
   /**
-   * Sprint / Focus Complete -> Relaxing descending chord (F5 -> C5 -> A4)
-   * Signals that effort is over and calm downshifting begins.
+   * Sprint / Focus Complete -> Relaxing downshift chord (F5 -> C5 -> A4)
    */
   playSprintComplete() {
+    if (!this.isSoundEnabled()) return;
     this.initContext();
     if (!this.ctx) return;
 
+    const profile = this.getActiveProfile();
     const now = this.ctx.currentTime;
+
+    if (profile === 'minimal') {
+      // Crisp wooden double-tap
+      this.scheduleTone(523.25, now, 0.08, 0.2);
+      this.scheduleTone(392.00, now + 0.12, 0.1, 0.22);
+      return;
+    }
+
+    if (profile === 'crisp') {
+      this.scheduleTone(698.46, now, 0.4, 0.22, 'triangle');
+      this.scheduleTone(523.25, now + 0.1, 0.5, 0.20, 'triangle');
+      this.scheduleTone(440.00, now + 0.2, 0.8, 0.25, 'sine');
+      return;
+    }
+
+    // Default: Harmonic Warmth
     this.scheduleTone(698.46, now, 0.8, 0.22, 'sine');         // F5
     this.scheduleTone(523.25, now + 0.14, 0.9, 0.20, 'sine');  // C5
     this.scheduleTone(440.00, now + 0.30, 1.4, 0.25, 'sine');  // A4
@@ -65,39 +111,75 @@ class SoundEngine {
 
   /**
    * Rest Complete -> Energizing ascending triad (C5 -> E5 -> G5)
-   * Signals activation and return to focus.
    */
   playRestComplete() {
+    if (!this.isSoundEnabled()) return;
     this.initContext();
     if (!this.ctx) return;
 
+    const profile = this.getActiveProfile();
     const now = this.ctx.currentTime;
-    this.scheduleTone(523.25, now, 0.5, 0.18, 'triangle');        // C5
-    this.scheduleTone(659.25, now + 0.12, 0.5, 0.20, 'triangle'); // E5
-    this.scheduleTone(783.99, now + 0.24, 1.2, 0.25, 'sine');     // G5
+
+    if (profile === 'minimal') {
+      // Percussive upward double-tap
+      this.scheduleTone(440.00, now, 0.08, 0.2);
+      this.scheduleTone(659.25, now + 0.1, 0.1, 0.24);
+      return;
+    }
+
+    if (profile === 'crisp') {
+      this.scheduleTone(523.25, now, 0.2, 0.20, 'triangle');
+      this.scheduleTone(659.25, now + 0.08, 0.2, 0.22, 'triangle');
+      this.scheduleTone(783.99, now + 0.16, 0.6, 0.26, 'sine');
+      return;
+    }
+
+    // Default: Harmonic Warmth
+    this.scheduleTone(523.25, now, 0.5, 0.18, 'triangle');
+    this.scheduleTone(659.25, now + 0.12, 0.5, 0.20, 'triangle');
+    this.scheduleTone(783.99, now + 0.24, 1.2, 0.25, 'sine');
   }
 
   /**
-   * Long Rest Reached -> Celebratory harmonic major chord fanfare (C5 -> E5 -> G5 -> C6)
-   * Acknowledges milestone completion across multiple rounds.
+   * Long Rest Reached -> Celebratory harmonic major chord fanfare
    */
   playLongRestFanfare() {
+    if (!this.isSoundEnabled()) return;
     this.initContext();
     if (!this.ctx) return;
 
+    const profile = this.getActiveProfile();
     const now = this.ctx.currentTime;
-    this.scheduleTone(523.25, now, 0.6, 0.16, 'triangle');        // C5
-    this.scheduleTone(659.25, now + 0.10, 0.6, 0.18, 'triangle'); // E5
-    this.scheduleTone(783.99, now + 0.20, 0.7, 0.20, 'triangle'); // G5
-    this.scheduleTone(1046.50, now + 0.32, 1.8, 0.26, 'sine');    // C6
-    // Ambient sub-bass swell
-    this.scheduleTone(261.63, now + 0.32, 1.6, 0.15, 'sine');     // C4
+
+    if (profile === 'minimal') {
+      // Clean woodblock triad
+      this.scheduleTone(523.25, now, 0.08, 0.2);
+      this.scheduleTone(659.25, now + 0.09, 0.08, 0.22);
+      this.scheduleTone(783.99, now + 0.18, 0.12, 0.24);
+      return;
+    }
+
+    if (profile === 'crisp') {
+      this.scheduleTone(523.25, now, 0.25, 0.18, 'triangle');
+      this.scheduleTone(659.25, now + 0.08, 0.25, 0.20, 'triangle');
+      this.scheduleTone(783.99, now + 0.16, 0.3, 0.22, 'triangle');
+      this.scheduleTone(1046.50, now + 0.24, 1.0, 0.28, 'sine');
+      return;
+    }
+
+    // Default: Harmonic Warmth
+    this.scheduleTone(523.25, now, 0.6, 0.16, 'triangle');
+    this.scheduleTone(659.25, now + 0.10, 0.6, 0.18, 'triangle');
+    this.scheduleTone(783.99, now + 0.20, 0.7, 0.20, 'triangle');
+    this.scheduleTone(1046.50, now + 0.32, 1.8, 0.26, 'sine');
+    this.scheduleTone(261.63, now + 0.32, 1.6, 0.15, 'sine'); // Warm sub swell
   }
 
   /**
-   * Tactile click for buttons and checklist progression
+   * Tactile low-latency feedback for buttons and checklist interactions
    */
   playTactileClick() {
+    if (!this.isSoundEnabled()) return;
     this.initContext();
     if (!this.ctx) return;
 
@@ -120,9 +202,10 @@ class SoundEngine {
   }
 
   /**
-   * High-contrast piercing double alert for loud environments
+   * Piercing double alert for loud environments
    */
   playBuzzer() {
+    if (!this.isSoundEnabled()) return;
     this.initContext();
     if (!this.ctx) return;
 
