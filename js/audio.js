@@ -1,6 +1,7 @@
 /**
  * Rally - Web Audio Synthesizer
- * Zero-dependency acoustic engine supporting Warm, Crisp, and Minimal sound profiles.
+ * Zero-dependency acoustic engine supporting Warm, Crisp, and Minimal sound profiles,
+ * including interactive profile auditioning.
  */
 
 import { store } from './state.js';
@@ -38,12 +39,12 @@ class SoundEngine {
   }
 
   /**
-   * Schedules a shaped tone with envelope curves matched to the active profile
+   * Schedules a shaped tone with envelope curves matched to the specified or active profile
    */
-  scheduleTone(freq, start, duration, gainLevel = 0.2, typeOverride = null) {
-    if (!this.ctx || !this.isSoundEnabled()) return;
+  scheduleTone(freq, start, duration, gainLevel = 0.2, typeOverride = null, profileOverride = null) {
+    if (!this.ctx) return;
 
-    const profile = this.getActiveProfile();
+    const profile = profileOverride || this.getActiveProfile();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
@@ -53,7 +54,7 @@ class SoundEngine {
 
     if (profile === 'crisp') {
       oscType = typeOverride || 'triangle';
-      attackTime = 0.008; // Snappier, bright attack
+      attackTime = 0.008; // Snappy, bright attack
       actualGain = gainLevel * 1.1;
     } else if (profile === 'minimal') {
       oscType = 'triangle';
@@ -79,6 +80,34 @@ class SoundEngine {
   }
 
   /**
+   * Plays a signature audition chime for the selected profile in settings
+   */
+  previewProfile(profileName) {
+    this.initContext();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+
+    if (profileName === 'minimal') {
+      // Woodblock double-tap preview
+      this.scheduleTone(523.25, now, 0.08, 0.22, null, 'minimal');
+      this.scheduleTone(659.25, now + 0.1, 0.1, 0.24, null, 'minimal');
+      return;
+    }
+
+    if (profileName === 'crisp') {
+      // Snappy arcade ascending preview
+      this.scheduleTone(523.25, now, 0.18, 0.2, 'triangle', 'crisp');
+      this.scheduleTone(783.99, now + 0.1, 0.4, 0.24, 'triangle', 'crisp');
+      return;
+    }
+
+    // Default: Harmonic Warmth preview
+    this.scheduleTone(523.25, now, 0.6, 0.2, 'sine', 'warm');
+    this.scheduleTone(659.25, now + 0.12, 0.8, 0.22, 'sine', 'warm');
+  }
+
+  /**
    * Sprint / Focus Complete -> Relaxing downshift chord (F5 -> C5 -> A4)
    */
   playSprintComplete() {
@@ -90,7 +119,6 @@ class SoundEngine {
     const now = this.ctx.currentTime;
 
     if (profile === 'minimal') {
-      // Crisp wooden double-tap
       this.scheduleTone(523.25, now, 0.08, 0.2);
       this.scheduleTone(392.00, now + 0.12, 0.1, 0.22);
       return;
@@ -121,7 +149,6 @@ class SoundEngine {
     const now = this.ctx.currentTime;
 
     if (profile === 'minimal') {
-      // Percussive upward double-tap
       this.scheduleTone(440.00, now, 0.08, 0.2);
       this.scheduleTone(659.25, now + 0.1, 0.1, 0.24);
       return;
@@ -152,7 +179,6 @@ class SoundEngine {
     const now = this.ctx.currentTime;
 
     if (profile === 'minimal') {
-      // Clean woodblock triad
       this.scheduleTone(523.25, now, 0.08, 0.2);
       this.scheduleTone(659.25, now + 0.09, 0.08, 0.22);
       this.scheduleTone(783.99, now + 0.18, 0.12, 0.24);
