@@ -1,56 +1,66 @@
 /**
- * Focus Session - Component Styles
- * Mode navigation, SVG countdown dial, elevated control buttons, and settings modal.
+ * Rally - Component Styles
+ * Room navigation, timer dial, Quest checklist, Peer presence grid, and modals.
  */
 
 /* ==========================================================================
-   Header & Mode Selection Navigation
+   Header & Room Presence Bar
    ========================================================================== */
 .app-header {
   width: 100%;
-  max-width: 480px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
   padding: var(--space-xs) 0;
   z-index: var(--z-nav);
 }
 
-.mode-selector {
+.brand-badge {
   display: inline-flex;
   align-items: center;
-  background-color: var(--surface-card);
-  border: 1px solid var(--surface-border);
-  padding: 4px;
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-sm);
-  transition: background-color var(--transition-mode), border-color var(--transition-base);
-}
-
-.mode-btn {
-  padding: var(--space-xs) var(--space-md);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
-  border-radius: var(--radius-full);
-  transition: all var(--transition-base);
-}
-
-.mode-btn:hover:not([aria-pressed="true"]) {
+  gap: var(--space-xs);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-base);
+  letter-spacing: -0.02em;
   color: var(--text-primary);
 }
 
-.mode-btn[aria-pressed="true"] {
-  background-color: var(--theme-accent);
-  color: var(--color-slate-950);
+.brand-badge svg {
+  color: var(--theme-accent);
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.room-btn {
+  height: 38px;
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-full);
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+}
+
+.room-btn[data-connected="true"] {
+  border-color: var(--color-success);
+  color: var(--text-primary);
+}
+
+.room-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .icon-btn {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-full);
   background-color: var(--surface-card);
   border: 1px solid var(--surface-border);
@@ -69,17 +79,17 @@
 }
 
 /* ==========================================================================
-   Timer Stage & Radial Progress Ring
+   Timer Stage & Progress Dial
    ========================================================================== */
-.timer-container {
+.timer-stage {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   position: relative;
-  width: min(88vw, 360px);
-  height: min(88vw, 360px);
-  margin: var(--space-lg) 0;
+  width: min(84vw, 340px);
+  height: min(84vw, 340px);
+  margin: var(--space-xs) 0;
 }
 
 .progress-ring {
@@ -88,7 +98,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  transform: rotate(-90deg); /* Start countdown at 12 o'clock */
+  transform: rotate(-90deg); /* Start at 12 o'clock */
 }
 
 .progress-ring-bg {
@@ -98,11 +108,11 @@
 .progress-ring-indicator {
   stroke: var(--theme-accent);
   stroke-linecap: round;
-  transition: stroke-dashoffset 300ms linear, stroke var(--transition-mode);
-  filter: drop-shadow(0 0 10px var(--theme-glow));
+  transition: stroke-dashoffset 250ms linear, stroke var(--transition-mode);
+  filter: drop-shadow(0 0 12px var(--theme-glow));
 }
 
-.timer-content {
+.timer-readout {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -111,37 +121,32 @@
   text-align: center;
 }
 
-.timer-display {
+.timer-digits {
   font-size: var(--text-timer);
   font-weight: var(--font-weight-bold);
   line-height: 1;
   color: var(--text-primary);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
 }
 
-.session-label {
+.mode-pill {
   margin-top: var(--space-xs);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.12em;
+  padding: 4px var(--space-md);
+  border-radius: var(--radius-full);
+  background-color: var(--surface-card-subtle);
+  border: 1px solid var(--surface-border);
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--theme-accent);
-  transition: color var(--transition-mode);
+  transition: all var(--transition-mode);
 }
 
 /* ==========================================================================
-   Control Bar & Action Buttons
+   Control Actions Bar
    ========================================================================== */
-.controls-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-lg);
-  width: 100%;
-  max-width: 360px;
-}
-
-.action-bar {
+.controls-bar {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -150,8 +155,8 @@
 }
 
 .btn-primary {
-  min-width: 140px;
-  height: 54px;
+  min-width: 136px;
+  height: 52px;
   padding: 0 var(--space-xl);
   border-radius: var(--radius-full);
   background-color: var(--theme-accent);
@@ -165,17 +170,16 @@
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  filter: brightness(1.06);
+  filter: brightness(1.08);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  filter: brightness(0.95);
 }
 
 .btn-ghost {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   border: 1px solid transparent;
@@ -189,47 +193,276 @@
 }
 
 /* ==========================================================================
-   Cycle / Sequence Tracker
+   Current Quest & Stepping Stones Card
    ========================================================================== */
-.cycle-tracker {
+.quest-card {
+  width: 100%;
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  transition: border-color var(--transition-base);
+}
+
+.quest-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.quest-title-input {
+  flex: 1;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  outline: none;
+}
+
+.quest-title-input::placeholder {
+  color: var(--text-muted);
+}
+
+.stones-counter {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stepping-stones-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.stone-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-card-subtle);
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.stone-item:hover {
+  border-color: var(--surface-border);
+}
+
+.stone-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  border: 2px solid var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.stone-checkbox:checked {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.stone-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  color: var(--color-slate-950);
+  font-weight: var(--font-weight-bold);
+}
+
+.stone-text {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  border: none;
+  background: transparent;
+  outline: none;
+}
+
+.stone-item[data-completed="true"] .stone-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.stone-delete-btn {
+  opacity: 0.3;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--transition-fast);
+}
+
+.stone-item:hover .stone-delete-btn {
+  opacity: 0.8;
+}
+
+.stone-delete-btn:hover {
+  opacity: 1;
+  color: var(--color-danger);
+}
+
+.add-stone-form {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  margin-top: var(--space-2xs);
 }
 
-.cycle-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background-color: var(--theme-track);
+.add-stone-input {
+  flex: 1;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-slate-900);
+  border: 1px dashed var(--surface-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.add-stone-input:focus {
+  border-style: solid;
+  border-color: var(--theme-accent);
+}
+
+.add-stone-btn {
+  height: 32px;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-card);
   border: 1px solid var(--surface-border);
-  transition: all var(--transition-base);
-}
-
-.cycle-dot[data-active="true"] {
-  background-color: var(--theme-accent);
-  box-shadow: 0 0 8px var(--theme-glow);
-  border-color: transparent;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 /* ==========================================================================
-   Accessible Settings Modal (<dialog>)
+   Multi-Peer Presence Grid (Body Doubling / Shared Squad)
+   ========================================================================== */
+.peer-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.peer-section-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.peer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.peer-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-sm);
+  background-color: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.peer-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background-color: var(--peer-accent, var(--theme-accent));
+}
+
+.peer-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.peer-name {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.peer-timer {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--peer-accent, var(--theme-accent));
+}
+
+.peer-quest {
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.peer-active-stone {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.peer-progress-bar {
+  width: 100%;
+  height: 4px;
+  background-color: var(--theme-track);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.peer-progress-fill {
+  height: 100%;
+  background-color: var(--peer-accent, var(--theme-accent));
+  transition: width var(--transition-base);
+}
+
+/* ==========================================================================
+   Modals & Accessible Dialogs (<dialog>)
    ========================================================================== */
 .modal-dialog {
   margin: auto;
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   background-color: var(--color-slate-850);
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
-  max-width: 420px;
+  max-width: 440px;
   width: calc(100% - 32px);
   box-shadow: var(--shadow-card);
   z-index: var(--z-modal);
 }
 
 .modal-dialog::backdrop {
-  background-color: rgba(7, 9, 14, 0.75);
+  background-color: var(--surface-overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -238,26 +471,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-md);
 }
 
 .modal-title {
   font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-md);
+  font-weight: var(--font-weight-bold);
 }
 
 .form-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
+  gap: var(--space-md);
 }
 
 .form-label {
@@ -266,7 +493,7 @@
 }
 
 .form-input {
-  width: 80px;
+  width: 84px;
   padding: var(--space-xs) var(--space-sm);
   background-color: var(--color-slate-900);
   border: 1px solid var(--surface-border);
@@ -276,11 +503,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-.form-input:focus-visible {
-  border-color: var(--theme-accent);
+.form-input-full {
+  width: 100%;
+  text-align: left;
 }
 
-/* Custom accessible toggle switch */
 .switch-input {
   appearance: none;
   -webkit-appearance: none;
@@ -315,8 +542,14 @@
 }
 
 .modal-footer {
-  margin-top: var(--space-xl);
+  margin-top: var(--space-lg);
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+.room-invite-box {
+  display: flex;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
 }
