@@ -1,16 +1,18 @@
 /**
  * Rally - UI Controller & DOM Orchestrator
- * Renders rounds HUD, cycle indicators, three-phase timer dials, and squad state.
+ * Manages inline identity editing, live timer sync pills, room code views, and squad grids.
  */
 
 import { dynamicFavicon } from './favicon.js';
 import { store } from './state.js';
+import { peerSync } from './peer-sync.js';
 
 class UIController {
   constructor() {
     this.html = document.documentElement;
 
-    // Header & Room elements
+    // Header & Identity elements
+    this.inlineNameInput = document.getElementById('inline-name-input');
     this.roomBtn = document.getElementById('room-btn');
     this.roomStatusIndicator = document.getElementById('room-status-indicator');
 
@@ -23,6 +25,12 @@ class UIController {
     this.primaryToggleBtn = document.getElementById('primary-toggle-btn');
     this.a11yAnnouncer = document.getElementById('a11y-announcer');
 
+    // Live Sync Banner elements
+    this.syncBanner = document.getElementById('sync-banner');
+    this.toggleSyncBtn = document.getElementById('toggle-sync-btn');
+    this.syncStatusIcon = document.getElementById('sync-status-icon');
+    this.syncStatusLabel = document.getElementById('sync-status-label');
+
     // Quest & Stepping Stone elements
     this.questTitleInput = document.getElementById('quest-title-input');
     this.stonesCounter = document.getElementById('stones-counter');
@@ -34,7 +42,6 @@ class UIController {
 
     // Settings Modal elements
     this.settingsDialog = document.getElementById('settings-dialog');
-    this.displayNameInput = document.getElementById('display-name-input');
     this.sprintMinInput = document.getElementById('sprint-min');
     this.sprintSecInput = document.getElementById('sprint-sec');
     this.shortRestMinInput = document.getElementById('short-rest-min');
@@ -51,8 +58,11 @@ class UIController {
     // Room Modal elements
     this.roomDialog = document.getElementById('room-dialog');
     this.roomModalStatus = document.getElementById('room-modal-status');
-    this.syncModeToggle = document.getElementById('sync-mode-toggle');
+    this.retryConnectionBtn = document.getElementById('retry-connection-btn');
+    this.roomShareSection = document.getElementById('room-share-section');
+    this.displayRoomCode = document.getElementById('display-room-code');
     this.shareLinkInput = document.getElementById('share-link-input');
+    this.leaveRoomBtn = document.getElementById('leave-room-btn');
 
     // SVG radial progress setup (r = 150 -> 2 * PI * 150 ≈ 942.48)
     this.circumference = 2 * Math.PI * 150;
@@ -88,16 +98,21 @@ class UIController {
     const { session, config, quest, room, profile } = state;
     const { mode, status, remainingMs, totalDurationMs, currentRound } = session;
 
-    // 1. Theme and mode badge
+    // 1. Theme and mode pill
     this.html.setAttribute('data-theme-mode', mode);
     this.sessionModeBadge.textContent = this.getModeLabel(mode);
 
-    // 2. Round HUD and Cycle Dots
+    // 2. Inline nickname field (preserve input focus)
+    if (this.inlineNameInput && document.activeElement !== this.inlineNameInput) {
+      this.inlineNameInput.value = profile.displayName;
+    }
+
+    // 3. Round HUD and Cycle Dots
     const totalRoundsText = config.totalRounds > 0 ? ` of ${config.totalRounds}` : '';
     this.roundHudBadge.textContent = `Round ${currentRound}${totalRoundsText}`;
     this.renderCycleDots(currentRound, config.roundsBeforeLongRest);
 
-    // 3. Digits & Toggle Button
+    // 4. Digits & Primary Toggle Button
     const timeFormatted = this.formatTime(remainingMs);
     this.timerDisplay.textContent = timeFormatted;
 
@@ -108,7 +123,7 @@ class UIController {
       isRunning ? `Pause ${this.getModeLabel(mode)}` : `Start ${this.getModeLabel(mode)}`
     );
 
-    // 4. Progress Dial Offset
+    // 5. Progress Dial Offset
     const elapsedRatio = totalDurationMs > 0 ? (totalDurationMs - remainingMs) / totalDurationMs : 0;
     const normalizedRatio = config.timerDirection === 'countup' 
       ? 1 
@@ -116,27 +131,28 @@ class UIController {
     const offset = this.circumference * (1 - normalizedRatio);
     this.progressIndicator.style.strokeDashoffset = `${offset}px`;
 
-    // 5. Browser Title & Favicon
+    // 6. Browser Title & Favicon
     document.title = `${timeFormatted} • Rally`;
     dynamicFavicon.update(normalizedRatio, mode);
 
-    // 6. Current Quest & Stepping Stones
+    // 7. Contextual Live Sync Banner (Shown only when in a room)
+    this.renderSyncBanner(room);
+
+    // 8. Current Quest & Stepping Stones
     if (document.activeElement !== this.questTitleInput) {
       this.questTitleInput.value = quest.title;
     }
     this.renderSteppingStones(quest.stones);
 
-    // 7. Room Network Indicator & Peers
+    // 9. Room Network Status & Peer Grid
     this.renderRoomStatus(room);
     this.renderPeerGrid(room.peers);
 
-    // 8. Hydrate Settings Modal Inputs without overriding active typing
+    // 10. Hydrate Settings Modal Inputs without overriding active edits
     const activeEl = document.activeElement;
     const isEditingSettings = this.settingsDialog && this.settingsDialog.open && this.settingsDialog.contains(activeEl);
 
     if (!isEditingSettings) {
-      if (this.displayNameInput) this.displayNameInput.value = profile.displayName;
-
       const sSec = config.sprintDurationSeconds || 1500;
       if (this.sprintMinInput) this.sprintMinInput.value = Math.floor(sSec / 60);
       if (this.sprintSecInput) this.sprintSecInput.value = sSec % 60;
@@ -157,17 +173,37 @@ class UIController {
       if (this.soundToggle) this.soundToggle.checked = config.soundEnabled;
     }
 
-    if (this.syncModeToggle) this.syncModeToggle.checked = room.syncTimers;
-
-    // 9. Accessibility Milestones
+    // 11. Screen-reader announcements
     this.evaluateA11yMilestones(remainingMs, status);
+  }
+
+  renderSyncBanner(room) {
+    if (!this.syncBanner || !this.toggleSyncBtn) return;
+
+    if (!room.roomId) {
+      this.syncBanner.style.display = 'none';
+      return;
+    }
+
+    this.syncBanner.style.display = 'flex';
+    this.toggleSyncBtn.setAttribute('data-active', room.syncTimers ? 'true' : 'false');
+    this.toggleSyncBtn.setAttribute('aria-pressed', room.syncTimers ? 'true' : 'false');
+
+    if (room.syncTimers) {
+      this.syncStatusIcon.textContent = '🔗';
+      this.syncStatusLabel.textContent = room.isHost 
+        ? 'Timers Linked (You Lead)' 
+        : 'Timers Linked (Host Controls)';
+    } else {
+      this.syncStatusIcon.textContent = '🔓';
+      this.syncStatusLabel.textContent = 'Timers Independent (Co-working)';
+    }
   }
 
   renderCycleDots(currentRound, cycleLength) {
     if (!this.cycleDotsContainer) return;
     this.cycleDotsContainer.innerHTML = '';
     
-    // Cycle wraps based on roundsBeforeLongRest
     const safeCycle = Math.max(1, cycleLength || 4);
     const activeDotIndex = ((currentRound - 1) % safeCycle) + 1;
 
@@ -222,6 +258,7 @@ class UIController {
   renderRoomStatus(room) {
     const { roomId, connectionStatus, peers } = room;
     const peerCount = Object.keys(peers).length + 1;
+    const cleanCode = peerSync.getCleanRoomCode();
 
     if (this.roomBtn) {
       this.roomBtn.setAttribute('data-status', connectionStatus);
@@ -230,22 +267,34 @@ class UIController {
     if (!roomId) {
       if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '👥 Solo';
       if (this.roomModalStatus) this.roomModalStatus.textContent = 'Solo (No active room)';
+      if (this.retryConnectionBtn) this.retryConnectionBtn.style.display = 'none';
+      if (this.roomShareSection) this.roomShareSection.style.display = 'none';
+      if (this.leaveRoomBtn) this.leaveRoomBtn.style.display = 'none';
       if (this.shareLinkInput) this.shareLinkInput.value = '';
       return;
+    }
+
+    // Inside a room
+    if (this.roomShareSection) this.roomShareSection.style.display = 'block';
+    if (this.leaveRoomBtn) this.leaveRoomBtn.style.display = 'inline-flex';
+    if (this.displayRoomCode) this.displayRoomCode.textContent = cleanCode || '—';
+
+    if (this.shareLinkInput) {
+      this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${roomId}`;
     }
 
     if (connectionStatus === 'connecting') {
       if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '🟡 Connecting...';
       if (this.roomModalStatus) this.roomModalStatus.textContent = 'Connecting to squad mesh...';
+      if (this.retryConnectionBtn) this.retryConnectionBtn.style.display = 'none';
     } else if (connectionStatus === 'connected') {
       if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = `🟢 ${peerCount} in Squad`;
       if (this.roomModalStatus) this.roomModalStatus.textContent = `Connected (${peerCount} active)`;
-      if (this.shareLinkInput) {
-        this.shareLinkInput.value = `${window.location.origin}${window.location.pathname}#room=${roomId}`;
-      }
+      if (this.retryConnectionBtn) this.retryConnectionBtn.style.display = 'none';
     } else {
       if (this.roomStatusIndicator) this.roomStatusIndicator.textContent = '🔴 Offline';
-      if (this.roomModalStatus) this.roomModalStatus.textContent = 'Disconnected. Check your network connection.';
+      if (this.roomModalStatus) this.roomModalStatus.textContent = 'Disconnected';
+      if (this.retryConnectionBtn) this.retryConnectionBtn.style.display = 'inline-flex';
     }
   }
 
