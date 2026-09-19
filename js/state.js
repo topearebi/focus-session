@@ -1,6 +1,6 @@
 /**
  * Rally - Reactive State Store & Persistence
- * Supports sound profiles, second-precision intervals, task cloning, and peer presence.
+ * Supports task editing, reordering, sound profiles, interval timing, and peer presence.
  */
 
 const STORAGE_KEY = 'rally_state_v4';
@@ -168,6 +168,29 @@ class StateStore {
     this.notify();
   }
 
+  updateSteppingStone(id, newText) {
+    const stone = this.state.quest.stones.find((s) => s.id === id);
+    if (stone && newText && newText.trim()) {
+      stone.text = newText.trim();
+      this.notify();
+    }
+  }
+
+  moveSteppingStone(id, direction) {
+    const index = this.state.quest.stones.findIndex((s) => s.id === id);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= this.state.quest.stones.length) return;
+
+    const stones = [...this.state.quest.stones];
+    const [movedStone] = stones.splice(index, 1);
+    stones.splice(targetIndex, 0, movedStone);
+
+    this.state.quest.stones = stones;
+    this.notify();
+  }
+
   toggleSteppingStone(id) {
     const stone = this.state.quest.stones.find((s) => s.id === id);
     if (stone) {
@@ -181,9 +204,6 @@ class StateStore {
     this.notify();
   }
 
-  /**
-   * Clones a peer's process into the local user's checklist
-   */
   importSteppingStones(stones, newQuestTitle = null) {
     if (!Array.isArray(stones) || stones.length === 0) return;
 
@@ -194,7 +214,7 @@ class StateStore {
     const imported = stones.map((s, index) => ({
       id: `stone-import-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 5)}`,
       text: s.text,
-      completed: false, // Fresh personal progress
+      completed: false,
     }));
 
     this.state.quest.stones = imported;
