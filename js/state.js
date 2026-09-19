@@ -1,29 +1,41 @@
 /**
- * Focus Session - State Management & Persistence Store
- * Schema definition, reactive subscriber bus, and localStorage synchronization.
+ * Rally - Reactive State Store & Persistence
+ * Manages timer state, Quests, Stepping Stones, user profile, and peer roster.
  */
 
-const STORAGE_KEY = 'focus_session_state_v2';
+const STORAGE_KEY = 'rally_state_v1';
 
-/**
- * Default fallback configuration & state schema
- */
 const DEFAULT_STATE = {
+  profile: {
+    displayName: 'Player 1',
+    avatarColor: '#38bdf8',
+  },
   config: {
-    focusDurationMinutes: 25,
-    shortBreakDurationMinutes: 5,
-    longBreakDurationMinutes: 15,
-    autoStartBreaks: false,
+    sprintDurationMinutes: 25,
+    restDurationMinutes: 5,
+    timerDirection: 'countdown', // 'countdown' | 'countup'
     soundEnabled: true,
   },
   session: {
-    mode: 'focus', // 'focus' | 'shortBreak' | 'longBreak'
+    mode: 'sprint', // 'sprint' | 'rest'
     status: 'idle', // 'idle' | 'running' | 'paused'
     remainingMs: 25 * 60 * 1000,
     totalDurationMs: 25 * 60 * 1000,
     targetTimestamp: null,
-    cycleIndex: 0, // 0 to 3 (4 intervals per round)
   },
+  quest: {
+    title: '',
+    stones: [
+      { id: 'stone-1', text: 'Define the game plan', completed: false },
+      { id: 'stone-2', text: 'Execute step one', completed: false }
+    ],
+  },
+  room: {
+    roomId: null,
+    isHost: false,
+    syncTimers: false,
+    peers: {}, // peerId -> peerState
+  }
 };
 
 class StateStore {
@@ -33,182 +45,210 @@ class StateStore {
   }
 
   /**
-   * Load persisted state from localStorage and reconcile timestamp deltas.
-   * Ensures uninterrupted tracking if the tab is reloaded or temporarily closed.
+   * Loads state from localStorage and restores active countdown timestamps
    */
   loadState() {
     try {
-      const serialized = localStorage.getItem(STORAGE_KEY);
-      if (!serialized) {
-        return structuredClone(DEFAULT_STATE);
-      }
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return structuredClone(DEFAULT_STATE);
 
-      const parsed = JSON.parse(serialized);
+      const parsed = JSON.parse(raw);
       const state = {
+        profile: { ...DEFAULT_STATE.profile, ...parsed.profile },
         config: { ...DEFAULT_STATE.config, ...parsed.config },
         session: { ...DEFAULT_STATE.session, ...parsed.session },
+        quest: { ...DEFAULT_STATE.quest, ...parsed.quest },
+        room: structuredClone(DEFAULT_STATE.room), // Rooms are ephemeral per session
       };
 
-      // Reconcile time if active countdown was preserved
+      // Reconcile remaining time if it was running when reloaded
       if (state.session.status === 'running' && state.session.targetTimestamp) {
-        const remaining = state.session.targetTimestamp - Date.now();
-        if (remaining > 0) {
-          state.session.remainingMs = remaining;
+        if (state.config.timerDirection === 'countdown') {
+          const remaining = state.session.targetTimestamp - Date.now();
+          if (remaining > 0) {
+            state.session.remainingMs = remaining;
+          } else {
+            state.session.remainingMs = 0;
+            state.session.status = 'idle';
+            state.session.targetTimestamp = null;
+          }
         } else {
-          // Time expired while page was closed
-          state.session.remainingMs = 0;
-          state.session.status = 'idle';
-          state.session.targetTimestamp = null;
+          // Count-up reconciliation
+          const elapsed = Date.now() - state.session.targetTimestamp;
+          state.session.remainingMs = Math.max(0, elapsed);
         }
       }
 
       return state;
     } catch (e) {
-      console.warn('Failed to parse persisted state. Resetting to defaults.', e);
+      console.warn('Failed to parse local state, restoring defaults:', e);
       return structuredClone(DEFAULT_STATE);
     }
   }
 
-  /**
-   * Commit state mutations to localStorage
-   */
   persistState() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      // Don't persist transient room peer connections to disk
+      const toPersist = {
+        profile: this.state.profile,
+        config: this.state.config,
+        session: this.state.session,
+        quest: this.state.quest,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist));
     } catch (e) {
-      console.error('Storage quota exceeded or private mode restriction:', e);
+      console.error('Failed to commit state to localStorage:', e);
     }
   }
 
-  /**
-   * Subscribe a callback to state updates
-   * @param {Function} callback - Invoked with (currentState) on every mutation
-   * @returns {Function} Unsubscribe method
-   */
   subscribe(callback) {
     this.subscribers.add(callback);
-    // Initial emit for hydration
     callback(this.getState());
     return () => this.subscribers.delete(callback);
   }
 
-  /**
-   * Broadcast state changes to all subscribers
-   */
   notify() {
     this.persistState();
-    const currentState = this.getState();
+    const snapshot = this.getState();
     for (const callback of this.subscribers) {
-      callback(currentState);
+      callback(snapshot);
     }
   }
 
-  /**
-   * Return an immutable snapshot of current state
-   */
   getState() {
     return structuredClone(this.state);
   }
 
-  /**
-   * Update configuration preferences
-   */
-  updateConfig(partialConfig) {
-    this.state.config = { ...this.state.config, ...partialConfig };
-
-    // If currently idle, adjust active session duration to match new config
-    if (this.state.session.status === 'idle') {
-      const mode = this.state.session.mode;
-      const durationKey = `${mode}DurationMinutes`;
-      const durationMinutes = this.state.config[durationKey] || DEFAULT_STATE.config.focusDurationMinutes;
-      const durationMs = durationMinutes * 60 * 1000;
-
-      this.state.session.totalDurationMs = durationMs;
-      this.state.session.remainingMs = durationMs;
-    }
-
+  /* ================= Profile & Preferences ================= */
+  updateProfile(displayName, avatarColor) {
+    if (displayName) this.state.profile.displayName = displayName.trim();
+    if (avatarColor) this.state.profile.avatarColor = avatarColor;
     this.notify();
   }
 
-  /**
-   * Transition session mode (focus, shortBreak, longBreak)
-   */
+  updateConfig(partialConfig) {
+    this.state.config = { ...this.state.config, ...partialConfig };
+
+    if (this.state.session.status === 'idle') {
+      const mode = this.state.session.mode;
+      const mins = mode === 'sprint' 
+        ? this.state.config.sprintDurationMinutes 
+        : this.state.config.restDurationMinutes;
+      const ms = mins * 60 * 1000;
+
+      this.state.session.totalDurationMs = ms;
+      this.state.session.remainingMs = this.state.config.timerDirection === 'countup' ? 0 : ms;
+    }
+    this.notify();
+  }
+
+  /* ================= Current Quest & Stepping Stones ================= */
+  setQuestTitle(title) {
+    this.state.quest.title = title;
+    this.notify();
+  }
+
+  addSteppingStone(text) {
+    if (!text || !text.trim()) return;
+    const newStone = {
+      id: `stone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text: text.trim(),
+      completed: false,
+    };
+    this.state.quest.stones.push(newStone);
+    this.notify();
+  }
+
+  toggleSteppingStone(id) {
+    const stone = this.state.quest.stones.find((s) => s.id === id);
+    if (stone) {
+      stone.completed = !stone.completed;
+      this.notify();
+    }
+  }
+
+  deleteSteppingStone(id) {
+    this.state.quest.stones = this.state.quest.stones.filter((s) => s.id !== id);
+    this.notify();
+  }
+
+  /* ================= Timer Session Engine ================= */
   setMode(mode) {
-    if (!['focus', 'shortBreak', 'longBreak'].includes(mode)) return;
+    if (!['sprint', 'rest'].includes(mode)) return;
 
-    let minutes = this.state.config.focusDurationMinutes;
-    if (mode === 'shortBreak') minutes = this.state.config.shortBreakDurationMinutes;
-    if (mode === 'longBreak') minutes = this.state.config.longBreakDurationMinutes;
-
-    const durationMs = minutes * 60 * 1000;
+    const mins = mode === 'sprint' 
+      ? this.state.config.sprintDurationMinutes 
+      : this.state.config.restDurationMinutes;
+    const ms = mins * 60 * 1000;
 
     this.state.session.mode = mode;
     this.state.session.status = 'idle';
-    this.state.session.remainingMs = durationMs;
-    this.state.session.totalDurationMs = durationMs;
+    this.state.session.totalDurationMs = ms;
+    this.state.session.remainingMs = this.state.config.timerDirection === 'countup' ? 0 : ms;
     this.state.session.targetTimestamp = null;
 
     this.notify();
   }
 
-  /**
-   * Mutate session timer metrics during active countdown
-   */
   updateRemaining(remainingMs) {
-    this.state.session.remainingMs = Math.max(0, remainingMs);
+    this.state.session.remainingMs = remainingMs;
     this.notify();
   }
 
-  /**
-   * Start or resume current timer session
-   */
   startTimer() {
     this.state.session.status = 'running';
-    this.state.session.targetTimestamp = Date.now() + this.state.session.remainingMs;
+    if (this.state.config.timerDirection === 'countdown') {
+      this.state.session.targetTimestamp = Date.now() + this.state.session.remainingMs;
+    } else {
+      // In count-up, anchor to starting point minus elapsed
+      this.state.session.targetTimestamp = Date.now() - this.state.session.remainingMs;
+    }
     this.notify();
   }
 
-  /**
-   * Pause current timer session
-   */
   pauseTimer() {
     this.state.session.status = 'paused';
     this.state.session.targetTimestamp = null;
     this.notify();
   }
 
-  /**
-   * Reset session back to duration configured for current mode
-   */
   resetTimer() {
     this.setMode(this.state.session.mode);
   }
 
-  /**
-   * Transition to next sequence step upon interval completion or manual skip
-   */
   advanceSession() {
-    const currentMode = this.state.session.mode;
-    let nextMode = 'focus';
-    let nextCycle = this.state.session.cycleIndex;
-
-    if (currentMode === 'focus') {
-      nextCycle = (nextCycle + 1) % 4;
-      // Every 4 focus intervals trigger a Long Break
-      nextMode = nextCycle === 0 ? 'longBreak' : 'shortBreak';
-    } else {
-      nextMode = 'focus';
-    }
-
-    this.state.session.cycleIndex = nextCycle;
+    const nextMode = this.state.session.mode === 'sprint' ? 'rest' : 'sprint';
     this.setMode(nextMode);
+  }
 
-    // Auto-start breaks or focus if enabled in user config
-    const shouldAutoStart = 
-      (nextMode.includes('Break') && this.state.config.autoStartBreaks);
+  /* ================= Shared Squad Room & Peers ================= */
+  setRoomId(roomId, isHost = false) {
+    this.state.room.roomId = roomId;
+    this.state.room.isHost = isHost;
+    if (!roomId) {
+      this.state.room.peers = {};
+    }
+    this.notify();
+  }
 
-    if (shouldAutoStart) {
-      this.startTimer();
+  setSyncTimers(enabled) {
+    this.state.room.syncTimers = enabled;
+    this.notify();
+  }
+
+  updatePeer(peerId, peerData) {
+    this.state.room.peers[peerId] = {
+      ...this.state.room.peers[peerId],
+      ...peerData,
+      lastSeen: Date.now(),
+    };
+    this.notify();
+  }
+
+  removePeer(peerId) {
+    if (this.state.room.peers[peerId]) {
+      delete this.state.room.peers[peerId];
+      this.notify();
     }
   }
 }
